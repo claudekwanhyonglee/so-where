@@ -64,9 +64,7 @@ const listStyle = 'flex flex-col divide-y divide-divider overflow-hidden rounded
 function Together({ board, risers }: { board: Board; risers: ReadonlySet<number> }) {
   const showChips = board.people.length > 1;
   const nameOf = (id: number) => board.people.find((p) => p.id === id)?.name ?? '?';
-  const [first, ...others] = board.combined;
-  const top = first && first.vetoedBy.length === 0 ? first : undefined;
-  const rest = top ? others : board.combined;
+  const [top, ...rest] = board.combined; // when every place is vetoed, the top pick is one with the fewest vetoes
   const marked = showChips && board.combined.some((r) => r.bottomThirdFor.length > 0);
 
   return (
@@ -78,6 +76,7 @@ function Together({ board, risers }: { board: Board; risers: ReadonlySet<number>
               <Crown size={16} aria-hidden="true" /> Top pick
             </span>
             <h3 className="font-display text-2xl/[1.08]">{top.name}</h3>
+            {top.vetoedBy.length > 0 && <NopeStamp who={top.vetoedBy.map(nameOf).join(', ')} />}
             <div className="flex items-center justify-between gap-2 text-[13px]">
               <span>{top.suburb}</span>
               {showChips && <Chips row={top} people={board.people} onMustard />}

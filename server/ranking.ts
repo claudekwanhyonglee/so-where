@@ -257,3 +257,66 @@ export function choosePair(candidates: Candidate[], rng: () => number, last?: La
   const [a, b] = neighbours.reduce((best, pair) => (closeness(pair[0].rating, pair[1].rating) > closeness(best[0].rating, best[1].rating) ? pair : best));
   return [a.id, b.id];
 }
+
+// ---------------------------------------------------------------------------------------------
+// Group: "fair, no one hates it" (Masthoff's average without misery, on ranks)
+
+export const inBottomThird = (position: number, count: number) => position > count - Math.floor(count / 3);
+
+const GROUP_SAMPLES = 1000;
+const GROUP_SEED = 22; // fixed, so the same answers always give the same result
+
+/** score: the place's average fair-rule score (its expected value); chance: how likely it is the group's best. */
+export type GroupStanding = { chance: number; score: number; vetoes: number };
+
+/**
+ * The group's ranking, best first, from everyone's candidates (the same places for each person).
+ * Draws plausible scores for everyone from their ratings many times and scores each place by the fair rule in
+ * each draw. Ordered by vetoes (fewest first), then average score: the best evening on average, so a place
+ * someone probably dislikes pays for that in proportion. Ranking by chance of being best instead would favour
+ * divisive, uncertain places. The chance (only places with the fewest vetoes can be best) breaks ties, and says
+ * how sure we are.
+ */
+export function groupRanking(people: Candidate[][]): Map<number, GroupStanding> {
+  const placeIds = people[0]?.map((c) => c.id) ?? [];
+  if (placeIds.length === 0) return new Map();
+  const vetoes = new Map(placeIds.map((id) => [id, people.filter((p) => p.some((c) => c.id === id && c.vetoed)).length]));
+  const fewestVetoes = Math.min(...vetoes.values());
+  const contenders = placeIds.filter((id) => vetoes.get(id) === fewestVetoes);
+
+  const wins = new Map(placeIds.map((id) => [id, 0]));
+  const totals = new Map(placeIds.map((id) => [id, 0]));
+  const rng = seededRandom(GROUP_SEED);
+  for (let s = 0; s < GROUP_SAMPLES; s++) {
+    const score = fairScores(people, rng);
+    const best = contenders.reduce((top, id) => (score.get(id)! > score.get(top)! ? id : top));
+    wins.set(best, wins.get(best)! + 1);
+    for (const id of placeIds) totals.set(id, totals.get(id)! + score.get(id)!);
+  }
+
+  const standings = placeIds.map((id): [number, GroupStanding] => [id, { chance: wins.get(id)! / GROUP_SAMPLES, score: totals.get(id)! / GROUP_SAMPLES, vetoes: vetoes.get(id)! }]);
+  return new Map(standings.sort(([, a], [, b]) => a.vetoes - b.vetoes || b.score - a.score || b.chance - a.chance));
+}
+
+/**
+ * One draw of the fair rule: each person's rank among the places they haven't vetoed becomes a percentile
+ * (1 for their top place, 0 for their last); a place scores the average percentile, minus 1 for each person
+ * who has it in their bottom third. A veto counts as last and bottom third; that only decides anything when
+ * every place is vetoed by someone.
+ */
+function fairScores(people: Candidate[][], rng: () => number) {
+  const score = new Map<number, number>();
+  const add = (id: number, points: number) => score.set(id, (score.get(id) ?? 0) + points);
+  for (const person of people) {
+    const kept = person
+      .filter((c) => !c.vetoed)
+      .map((c) => ({ id: c.id, draw: c.rating.mu + c.rating.rd * normal(rng) }))
+      .sort((a, b) => b.draw - a.draw);
+    kept.forEach(({ id }, i) => {
+      const percentile = kept.length > 1 ? (kept.length - 1 - i) / (kept.length - 1) : 1;
+      add(id, percentile / people.length - (inBottomThird(i + 1, kept.length) ? 1 : 0));
+    });
+    for (const c of person) if (c.vetoed) add(c.id, -1);
+  }
+  return score;
+}

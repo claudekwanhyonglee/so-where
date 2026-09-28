@@ -3,6 +3,7 @@ import {
   choosePair,
   DEFAULT_RATING,
   estimateSession,
+  groupRanking,
   isUpset,
   pendingReask,
   rankSession,
@@ -367,6 +368,79 @@ describe('#23 AC3: a surprising reversal is asked again within 5 pairs', () => {
     const reask: Reask = { pair: [0, 1], picksSince: 4 };
     const candidates: Candidate[] = [0, 1, 2, 3].map((id) => ({ id, rating: DEFAULT_RATING, comparisons: 5, vetoed: id === 1 }));
     for (const seed of SEEDS) expect(choosePair(candidates, seededRandom(seed), undefined, reask)).not.toContain(1);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// #24: fair group ranking
+
+/** A person whose settled scores are given in place-id order. */
+const settledPerson = (scores: number[], vetoed: number[] = []): Candidate[] =>
+  scores.map((mu, id) => ({ id, rating: { mu, rd: 60 }, comparisons: 10, vetoed: vetoed.includes(id) }));
+const groupOrder = (people: Candidate[][]) => [...groupRanking(people)].map(([id]) => id);
+
+describe('#24 AC1: each person counts equally', () => {
+  it('a place ranked #2 and #1 beats one ranked #1 and #3, even when one person spreads their scores far wider', () => {
+    const [X, Y] = [0, 1];
+    const wide = settledPerson([2600, 1600, 1500, 1400, 1300, 1200]); // X #1 by a mile, Y #2
+    const narrow = settledPerson([1500, 1800, 1650, 1350, 1200, 1050]); // Y #1, X #3
+    expect((2600 + 1500) / 2).toBeGreaterThan((1600 + 1800) / 2); // averaging scores would pick X
+    expect(groupOrder([wide, narrow])[0]).toBe(Y);
+    expect(groupOrder([wide, narrow])[1]).toBe(X);
+  });
+});
+
+describe('#24 AC2: no one hates it', () => {
+  it("with settled picks, a place in anyone's bottom third ranks below every place in nobody's", () => {
+    for (const seed of SEEDS) {
+      const rng = seededRandom(seed);
+      const shuffled = () => Array.from({ length: 9 }, (_, i) => 1000 + i * 150).sort(() => rng() - 0.5);
+      const people = Array.from({ length: 3 }, () => settledPerson(shuffled()));
+      const bottomThird = (id: number) =>
+        people.some((p) => {
+          const position = rankSession(p).findIndex((c) => c.id === id) + 1;
+          return position > 9 - 3;
+        });
+      const order = groupOrder(people);
+      const lastLiked = Math.max(...order.map((id, i) => (bottomThird(id) ? -1 : i)));
+      const firstHated = order.findIndex(bottomThird);
+      if (firstHated >= 0 && lastLiked >= 0) expect(firstHated).toBeGreaterThan(lastLiked);
+    }
+  });
+});
+
+describe('#24 AC3: vetoes', () => {
+  it('vetoed places come last', () => {
+    const order = groupOrder([settledPerson([1900, 1500, 1400], [0]), settledPerson([1900, 1500, 1400])]);
+    expect(order.at(-1)).toBe(0);
+  });
+
+  it('if every place is vetoed by someone, the top pick has the fewest vetoes', () => {
+    // Place 3 is everyone's favourite but has two vetoes; places 0–2 have one each.
+    const people = [settledPerson([1500, 1400, 1300, 2000], [0, 3]), settledPerson([1500, 1400, 1300, 2000], [1, 3]), settledPerson([1500, 1400, 1300, 2000], [2])];
+    const ranking = groupRanking(people);
+    const [top] = ranking.values();
+    expect(top.vetoes).toBe(1);
+    expect(groupOrder(people).at(-1)).toBe(3);
+  });
+});
+
+describe('#24 AC4: no jitter', () => {
+  it('the same ratings always give the same order and chances', () => {
+    const rng = seededRandom(3);
+    const people = Array.from({ length: 4 }, () => Array.from({ length: 12 }, (_, id): Candidate => ({ id, rating: { mu: 1500 + rng() * 50, rd: 300 }, comparisons: 1 })));
+    expect([...groupRanking(people)]).toEqual([...groupRanking(people)]);
+  });
+});
+
+describe('#24 AC6: fast enough', () => {
+  it('ranks 8 people × 40 places in well under 200 ms', () => {
+    const rng = seededRandom(5);
+    const people = Array.from({ length: 8 }, () => Array.from({ length: 40 }, (_, id): Candidate => ({ id, rating: { mu: 1300 + rng() * 400, rd: 60 + rng() * 290 }, comparisons: 3 })));
+    groupRanking(people); // warm up
+    const start = performance.now();
+    groupRanking(people);
+    expect(performance.now() - start).toBeLessThan(100);
   });
 });
 

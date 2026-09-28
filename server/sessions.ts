@@ -138,7 +138,7 @@ export function sessionsRoutes({ db, config, now, fetch }: Deps) {
     return c.json(
       sessions.map((s) => {
         const members = sessionMembers(db, s.id);
-        const top = leaderboard(db, s).combined.find((row) => row.vetoedBy.length === 0);
+        const [top] = leaderboard(db, s).combined;
         return {
           id: s.id,
           setId: s.set_id,
