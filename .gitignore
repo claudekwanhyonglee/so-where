@@ -1,1 +1,8 @@
 .claude/worktrees/
+node_modules/
+dist/
+data/
+.env
+test-results/
+playwright-report/
+.tk-pr-body.md

@@ -1,0 +1,12 @@
+services:
+  so-where:
+    build: .
+    env_file: .env
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - so-where-data:/data
+    restart: unless-stopped
+
+volumes:
+  so-where-data:
