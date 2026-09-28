@@ -1,22 +1,13 @@
 import { expect, test } from '@playwright/test';
-import { newPerson, startPicking, uniqueName } from './helpers.ts';
+import { addPlaceViaApi, newPerson, newSetViaApi, startPicking, uniqueName } from './helpers.ts';
 
 // The e2e server fakes Transitous: every trip takes 25 minutes.
 test('#10 AC1 + AC2: cards show transit time from home, or a Directions link without one', async ({ browser }) => {
   const { page } = await newPerson(browser, 'Commuter');
-  await page.getByRole('link', { name: 'Places', exact: true }).click();
-  const places = [uniqueName('Invented Tram Stop Cafe '), uniqueName('Invented Station Bar ')];
-  for (const name of places) {
-    const hex = Math.floor(Math.random() * 1e12).toString(16);
-    await page.getByLabel('Google Maps link').fill(`https://www.google.com/maps/place/${name.replaceAll(' ', '+')}/@-37.81,144.96,17z/data=!4m2!3m1!1s0x1:0x${hex}!3d-37.81!4d144.96`);
-    await page.getByRole('button', { name: /add place/i }).click();
-    await expect(page.getByRole('status')).toContainText(name);
-  }
-  await page.goto('/sets'); // the Sets page, until #19 folds it into Places
+  const ids: number[] = [];
+  for (const name of [uniqueName('Invented Tram Stop Cafe '), uniqueName('Invented Station Bar ')]) ids.push((await addPlaceViaApi(page, name, '', -37.81)).id);
   const setName = uniqueName('Transit ');
-  await page.getByLabel('New set name').fill(setName);
-  await page.getByRole('button', { name: /create set/i }).click();
-  for (const name of places) await page.getByRole('checkbox', { name }).check();
+  await newSetViaApi(page, setName, ids);
 
   // No home yet: Directions links in transit mode.
   await startPicking(page, setName);

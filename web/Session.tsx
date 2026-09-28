@@ -5,7 +5,7 @@ import { api, errorMessage } from './api.ts';
 import { Leaderboard, type Board } from './Leaderboard.tsx';
 import { googleMapsUrl, plural, swatch, transitDirectionsUrl } from './model.ts';
 import { Link } from './router.tsx';
-import { Avatar, Button, Card, Eyebrow, Notice, Sheet, inputBox } from './ui.tsx';
+import { Avatar, Button, Card, DESKTOP_QUERY, Eyebrow, Notice, Sheet, inputBox } from './ui.tsx';
 import { usePolling } from './usePolling.ts';
 
 export type CardPlace = { id: number; name: string; suburb: string | null; note: string; key: string; lat: number | null; lng: number | null };
@@ -15,7 +15,7 @@ type PairResponse = { pair: CardPlace[] | null; picks: number };
 
 const INFO_POLL_MS = 3000;
 const BOARD_POLL_MS = 2000;
-const DESKTOP = '(min-width: 760px)';
+
 
 export function SessionPage({ id, meId }: { id: string; meId: number }) {
   const info = usePolling(useCallback(() => api<SessionInfo>(`/sessions/${id}`), [id]), INFO_POLL_MS);
@@ -261,7 +261,7 @@ function useDesktopPickKeys(actions: { left: () => void; right: () => void; tie:
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const act = latest.current;
-      if (!act || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || !matchMedia(DESKTOP).matches) return;
+      if (!act || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || !matchMedia(DESKTOP_QUERY).matches) return;
       if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable], dialog')) return;
       if (document.querySelector('dialog[open]')) return;
       const key = { ArrowLeft: act.left, ArrowRight: act.right, ArrowDown: act.tie }[e.key];

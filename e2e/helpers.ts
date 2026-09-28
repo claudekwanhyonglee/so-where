@@ -45,9 +45,16 @@ export const placeLink = (name: string, lat = -37.8, lng = 144.96) => {
 };
 
 /** Adds a place through the API, for tests where adding it isn't the point. */
-export async function addPlaceViaApi(page: Page, name: string, note = '') {
-  const res = await page.request.post('/api/places', { data: { url: placeLink(name), note } });
+export async function addPlaceViaApi(page: Page, name: string, note = '', lat?: number) {
+  const res = await page.request.post('/api/places', { data: { url: placeLink(name, lat), note } });
   return (await res.json()).place as { id: number; name: string };
+}
+
+/** Makes a named set holding the given places through the API. */
+export async function newSetViaApi(page: Page, name: string, placeIds: number[] = []) {
+  const { id } = await (await page.request.post('/api/sets', { data: { name } })).json();
+  for (const placeId of placeIds) await page.request.put(`/api/sets/${id}/places/${placeId}`);
+  return id as number;
 }
 
 /** From anywhere in the app: choose a set on the Pick home screen and start picking from it. */

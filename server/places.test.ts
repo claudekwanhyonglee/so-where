@@ -107,6 +107,40 @@ describe('#4 AC4: no duplicates', () => {
   });
 });
 
+describe('#19 AC3: adding a place into sets', () => {
+  async function withSets() {
+    const { app } = testApp({ fetch: fakeFetch(fakeNominatim()) });
+    const me = await signedInDevice(app);
+    const [dates, cheap] = await Promise.all(['Date night', 'Cheap eats'].map(async (name) => (await (await me.post('/api/sets', { name })).json()).id as number));
+    const setsOf = async (name: string) => ((await (await me.get('/api/places')).json()) as { name: string; setIds: number[] }[]).find((p) => p.name === name)!.setIds;
+    return { me, dates, cheap, setsOf };
+  }
+
+  it('puts the new place in every set given, and lists each place with its sets', async () => {
+    const { me, dates, cheap, setsOf } = await withSets();
+    expect((await me.post('/api/places', { url: NOODLE_BAR, setIds: [dates, 'all'] })).status).toBe(201);
+    await me.post('/api/places', { url: GAI_WONG });
+    expect(await setsOf('Pretend Noodle Bar')).toEqual([dates]);
+    expect(await setsOf('Gai Wong')).toEqual([]);
+    expect((await (await me.get(`/api/sets/${dates}`)).json()).placeIds).toHaveLength(1);
+    expect((await (await me.get(`/api/sets/${cheap}`)).json()).placeIds).toHaveLength(0);
+  });
+
+  it('adds a place that is already there to the sets given', async () => {
+    const { me, dates, cheap, setsOf } = await withSets();
+    await me.post('/api/places', { url: NOODLE_BAR, setIds: [dates] });
+    const again = await me.post('/api/places', { url: NOODLE_BAR, setIds: [cheap] });
+    expect((await again.json()).existing).toBe(true);
+    expect((await setsOf('Pretend Noodle Bar')).sort()).toEqual([dates, cheap].sort());
+  });
+
+  it('refuses an unknown set, adding nothing', async () => {
+    const { me } = await withSets();
+    expect((await me.post('/api/places', { url: NOODLE_BAR, setIds: [999] })).status).toBe(404);
+    expect(await (await me.get('/api/places')).json()).toHaveLength(0);
+  });
+});
+
 describe('#4 AC5: the shared places list', () => {
   it('lists all places, and anyone can edit a note or delete a place', async () => {
     const { app } = testApp({ fetch: fakeFetch(fakeNominatim()) });

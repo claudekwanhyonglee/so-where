@@ -6,7 +6,6 @@ import { Home } from './Home.tsx';
 import { Places } from './Places.tsx';
 import { SessionPage } from './Session.tsx';
 import { Profile } from './Profile.tsx';
-import { SetPage, Sets } from './Sets.tsx';
 import { Link, usePath } from './router.tsx';
 import { SignIn } from './SignIn.tsx';
 import { Avatar } from './ui.tsx';
@@ -44,10 +43,8 @@ export function App() {
 
 function Page({ path, me, refresh }: { path: string; me: Me; refresh: () => void }) {
   if (path === '/you') return <Profile me={me} onChanged={refresh} onSignedOut={refresh} />;
-  if (path === '/places') return <Places />;
-  if (path === '/sets') return <Sets />;
-  const setId = path.match(/^\/sets\/([^/]+)$/)?.[1];
-  if (setId) return <SetPage key={setId} id={setId} />;
+  const places = path.match(/^\/places(?:\/([^/]+))?$/);
+  if (places) return <Places setId={places[1]} />;
   const sessionId = path.match(/^\/s\/([\w-]+)$/)?.[1];
   if (sessionId) return <SessionPage key={sessionId} id={sessionId} meId={me.id} />;
   return <Home me={me} />;
@@ -63,7 +60,7 @@ const NAV: NavItem[] = [
 
 /** The nav item a route belongs to: sessions under Pick, sets under Places. */
 function activeNav(path: string) {
-  if (path.startsWith('/places') || path.startsWith('/sets')) return '/places';
+  if (path.startsWith('/places')) return '/places';
   if (path === '/you') return '/you';
   return '/';
 }

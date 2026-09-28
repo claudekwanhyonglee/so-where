@@ -1,25 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
-import { settled, signUp, signUpHere, startPicking, uniqueName } from './helpers.ts';
-
-async function addPlace(page: Page, name: string, note = '') {
-  const hex = Math.floor(Math.random() * 1e12).toString(16);
-  await page.getByLabel('Google Maps link').fill(`https://www.google.com/maps/place/${name.replaceAll(' ', '+')}/@-37.8,144.96,17z/data=!4m2!3m1!1s0x1:0x${hex}!3d-37.8!4d144.96`);
-  await page.getByLabel('Note (optional)').fill(note);
-  await page.getByRole('button', { name: /add place/i }).click();
-  await expect(page.getByRole('status')).toContainText(name);
-}
+import { addPlaceViaApi, newSetViaApi, settled, signUp, signUpHere, startPicking, uniqueName } from './helpers.ts';
 
 /** Signs up, adds places, puts them in a new set and starts a session for it. Returns the session page's URL. */
 async function startSession(page: Page, places: string[]) {
   await signUp(page, uniqueName('Host'));
-  await page.getByRole('link', { name: 'Places', exact: true }).click();
-  for (const [i, name] of places.entries()) await addPlace(page, name, i === 0 ? 'Try the special' : '');
-
-  await page.goto('/sets'); // the Sets page, until #19 folds it into Places
+  const ids: number[] = [];
+  for (const [i, name] of places.entries()) ids.push((await addPlaceViaApi(page, name, i === 0 ? 'Try the special' : '')).id);
   const setName = uniqueName('Tonight ');
-  await page.getByLabel('New set name').fill(setName);
-  await page.getByRole('button', { name: /create set/i }).click();
-  for (const name of places) await page.getByRole('checkbox', { name }).check();
+  await newSetViaApi(page, setName, ids);
 
   await startPicking(page, setName);
   await expect(page.getByRole('heading', { name: setName })).toBeVisible();

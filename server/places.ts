@@ -4,6 +4,7 @@ import type { AppEnv } from './auth.ts';
 import type { Db } from './db.ts';
 import { resolvePlaceLink } from './google-maps.ts';
 import type { Nominatim } from './nominatim.ts';
+import { ALL_PLACES, setExists } from './sets.ts';
 
 export type Place = {
   id: number;
@@ -41,15 +42,31 @@ const NOT_A_PLACE_LINK =
 export function placesRoutes({ db, fetch, now }: Deps, nominatim: Nominatim) {
   const api = new Hono<AppEnv>();
 
-  api.get('/', (c) => c.json(db.prepare(`SELECT ${PLACE_COLUMNS} FROM places ORDER BY name COLLATE NOCASE`).all()));
+  /** Every place, each with the ids of the named sets it's in. */
+  api.get('/', (c) => {
+    const places = db.prepare(`SELECT ${PLACE_COLUMNS} FROM places ORDER BY name COLLATE NOCASE`).all() as Place[];
+    const setIds = new Map<number, number[]>();
+    for (const { place_id, set_id } of db.prepare('SELECT place_id, set_id FROM set_places ORDER BY set_id').all() as { place_id: number; set_id: number }[]) {
+      setIds.set(place_id, [...(setIds.get(place_id) ?? []), set_id]);
+    }
+    return c.json(places.map((p) => ({ ...p, setIds: setIds.get(p.id) ?? [] })));
+  });
 
+  /** Adds a place from its link, into the named sets in `setIds` too ("All places" needs no asking). */
   api.post('/', async (c) => {
-    const { url, note } = await c.req.json();
+    const { url, note, setIds = [] } = await c.req.json();
+    const sets = (Array.isArray(setIds) ? setIds : []).filter((id) => id !== ALL_PLACES).map(Number);
+    if (!sets.every((id) => Number.isInteger(id) && setExists(db, id))) return c.json({ error: 'No such set.' }, 404);
+    const addToSets = (placeId: number) => sets.forEach((setId) => db.prepare('INSERT OR IGNORE INTO set_places (set_id, place_id) VALUES (?, ?)').run(setId, placeId));
+
     const parsed = typeof url === 'string' ? await resolvePlaceLink(url, fetch).catch(() => null) : null;
     if (!parsed) return c.json({ error: NOT_A_PLACE_LINK }, 400);
 
     const existing = findPlaceByKey(db, parsed.key);
-    if (existing) return c.json({ place: existing, existing: true, message: `${existing.name} is already in the list.` });
+    if (existing) {
+      addToSets(existing.id);
+      return c.json({ place: existing, existing: true, message: `${existing.name} is already in the list.` });
+    }
 
     const located = parsed.lat !== undefined ? parsed : parsed.query ? await nominatim.search(parsed.query).catch(() => null) : null;
     if (!parsed.name || !located) {
@@ -57,6 +74,7 @@ export function placesRoutes({ db, fetch, now }: Deps, nominatim: Nominatim) {
     }
 
     const place = await insertPlace(db, nominatim, now(), { key: parsed.key, name: parsed.name, lat: located.lat!, lng: located.lng!, note });
+    addToSets(place.id);
     return c.json({ place }, 201);
   });
 

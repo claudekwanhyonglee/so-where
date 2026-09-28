@@ -20,6 +20,9 @@ const SWATCH = [
 
 export const swatch = (id: number) => SWATCH[Math.abs(id) % SWATCH.length];
 
+/** Picking needs a pair. */
+export const MIN_PLACES_TO_PICK = 2;
+
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** "Today", "Yesterday" or "N days ago", by calendar day. */

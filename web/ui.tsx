@@ -1,9 +1,10 @@
-import { Lock, MapPin, X } from 'lucide-react';
+import { Check, Lock, MapPin, X } from 'lucide-react';
 import {
   useEffect,
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
   type ButtonHTMLAttributes,
   type FormEvent,
   type InputHTMLAttributes,
@@ -223,6 +224,49 @@ export function Avatar({ person, size = 'sm' }: { person: { id: number; name: st
     <span title={person.name} aria-hidden="true" style={{ background: bg, color: fg }} className={`inline-grid flex-none place-items-center ${sizes[size]}`}>
       {person.name[0]?.toUpperCase()}
     </span>
+  );
+}
+
+export const DESKTOP_QUERY = '(min-width: 760px)';
+
+/** Whether the desktop layout applies, following the window as it resizes. */
+export function useIsDesktop() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = matchMedia(DESKTOP_QUERY);
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () => matchMedia(DESKTOP_QUERY).matches,
+  );
+}
+
+/** A place's square, in its own colour. */
+export function PlaceTile({ place, className = 'size-[42px] rounded-[14px] text-xl' }: { place: { id: number; name: string }; className?: string }) {
+  const { bg, fg } = swatch(place.id);
+  return (
+    <span aria-hidden="true" style={{ background: bg, color: fg }} className={`grid flex-none place-items-center font-display ${className}`}>
+      {place.name[0]?.toUpperCase()}
+    </span>
+  );
+}
+
+/** A tickable row, for checklists of sets or places. */
+export function CheckOption({ checked, disabled, onToggle, children }: { checked: boolean; disabled?: boolean; onToggle?: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onToggle}
+      className="group flex w-full items-center gap-3 rounded-[18px] bg-white p-3 text-left ring-[1.5px] ring-edge aria-checked:ring-[2.5px] aria-checked:ring-tomato disabled:opacity-60 disabled:!ring-[1.5px] disabled:!ring-edge"
+    >
+      {children}
+      <span className="grid size-6 flex-none place-items-center rounded-lg border-2 border-[#e2cfc4] text-white group-aria-checked:border-tomato group-aria-checked:bg-tomato group-disabled:!border-muted group-disabled:!bg-muted">
+        <Check size={14} aria-hidden="true" />
+      </span>
+    </button>
   );
 }
 

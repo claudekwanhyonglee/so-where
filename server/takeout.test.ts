@@ -106,6 +106,16 @@ describe('#5 AC4: import report', () => {
   });
 });
 
+describe('#19 AC10: the import report names the sets it filled', () => {
+  it('gives the id and name of the set made for each list, and none for Saved Places.json', async () => {
+    const { me } = await setup();
+    const report = await (await me.upload('/api/import', [LIST, STARRED])).json();
+    const sets = await (await me.get('/api/sets')).json();
+    const dateNight = sets.find((s: { name: string }) => s.name === 'Date night');
+    expect(report.sets).toEqual([{ id: dateNight.id, name: 'Date night' }]);
+  });
+});
+
 describe('#5 AC5: each list CSV is recorded as a set named after the list', () => {
   it('creates the set once and updates it on re-import', async () => {
     const { me, db } = await setup();

@@ -2,14 +2,13 @@ import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from './api.ts';
 import type { Me } from './App.tsx';
-import { plural, relativeDay } from './model.ts';
+import { MIN_PLACES_TO_PICK, plural, relativeDay } from './model.ts';
 import { Link, navigate } from './router.tsx';
-import { useSets, type SetSummary } from './Sets.tsx';
+import { useSets, type SetSummary } from './Places.tsx';
 import { Avatars, Button, Eyebrow, Notice, SetTile, Sheet, useSubmit } from './ui.tsx';
 
 type RecentSession = { id: string; setId: number | null; setName: string; createdAt: number; members: { id: number; name: string }[]; topPick: string | null };
 
-export const MIN_PLACES_TO_PICK = 2;
 
 export function Home({ me }: { me: Me }) {
   return (
@@ -24,10 +23,15 @@ export function Home({ me }: { me: Me }) {
 }
 
 function StartCard() {
-  const sets = useSets();
+  const { sets: loaded, reload } = useSets();
+  const sets = loaded ?? [];
   const [chosenId, setChosenId] = useState<SetSummary['id']>('all');
   const [choosing, setChoosing] = useState(false);
   const chosen = sets.find((s) => s.id === chosenId) ?? sets[0];
+  const choose = () => {
+    void reload(); // counts may have changed on another device
+    setChoosing(true);
+  };
   const start = useSubmit(async () => {
     const { id } = await api<{ id: string }>('/sessions', { body: { setId: chosen.id } });
     navigate(`/s/${id}`);
@@ -43,7 +47,7 @@ function StartCard() {
         <button
           aria-label={`Pick from ${chosen.name}, ${plural(chosen.placeCount, 'place')}`}
           aria-haspopup="dialog"
-          onClick={() => setChoosing(true)}
+          onClick={choose}
           className="relative inline-flex items-center gap-2 self-start rounded-full bg-white/20 px-3.5 py-[9px] font-bold"
         >
           {chosen.name} <small className="font-medium opacity-80">{plural(chosen.placeCount, 'place')}</small>
