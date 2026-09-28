@@ -1,0 +1,1134 @@
+<title>So Where? Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Shrikhand&display=swap">
+<style>
+  /* One deliberate look (the chosen Poster direction), so no dark variant. */
+  :root {
+    --bg: #fff4ec; --ink: #2a1712; --muted: #8a6b60; --raise: #ffffff; --divider: #f3e4da; --edge: #f0dccf; --soft: #f6e6dc;
+    --tomato: #e8432c; --tomato-deep: #c2321d; --mustard: #ffc93c; --blush: #ffe1d6; --leaf: #1f8a70;
+    --low: #ffdca8; --low-ink: #8a4b00; --up: #1f9d6b; --stamp: #d62d4f;
+    --disp: Shrikhand, Georgia, serif; --body: Figtree, system-ui, sans-serif;
+    --stage: #e9ddd4;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--stage); color: var(--ink); font: 15px/1.45 var(--body); }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  input { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--tomato); outline-offset: 2px; }
+  svg.ic { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- Prototype toolbar (not part of the app) ---------- */
+  .proto { height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px; font-size: 13px; color: #6d5a50; }
+  .proto b { font-weight: 700; color: var(--ink); }
+  .proto .grp { display: flex; background: #dccfc5; border-radius: 999px; padding: 3px; }
+  .proto .grp button { padding: 4px 12px; border-radius: 999px; font-weight: 600; }
+  .proto .grp button[aria-pressed="true"] { background: #fff; color: var(--ink); }
+  .proto .sp { flex: 1; }
+  .proto .hint { display: none; }
+  @media (min-width: 900px) { .proto .hint { display: inline; } }
+
+  /* ---------- App frame ---------- */
+  .stage { height: calc(100% - 48px); display: flex; justify-content: center; align-items: flex-start; padding: 0 16px 16px; }
+  #app { position: relative; background: var(--bg); overflow: hidden; display: flex; flex-direction: column; width: 100%; height: 100%; border-radius: 16px; box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 20px 50px -30px rgba(0,0,0,.4); }
+  #app.m-phone.framed { width: 390px; max-width: 100%; height: min(820px, 100%); border-radius: 36px; box-shadow: 0 0 0 8px #1a1210, 0 30px 60px -30px rgba(0,0,0,.6); }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; }
+  .page { display: flex; flex-direction: column; gap: 16px; padding: 18px 18px 28px; max-width: 1080px; margin: 0 auto; width: 100%; }
+  .m-desk .page { padding: 28px 32px 40px; gap: 20px; }
+
+  /* nav */
+  .dnav { flex: none; display: flex; align-items: center; gap: 24px; padding: 14px 28px; border-bottom: 1px solid var(--divider); }
+  .brand { font: 400 26px/1 var(--disp); color: var(--tomato); }
+  .dnav nav { display: flex; gap: 4px; }
+  .navbtn { padding: 8px 14px; border-radius: 999px; font-weight: 600; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+  .navbtn:hover { color: var(--ink); background: var(--soft); }
+  .navbtn.on { background: var(--blush); color: var(--tomato-deep); }
+  .dnav .me { margin-left: auto; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .tabs { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); padding: 8px 10px calc(14px + env(safe-area-inset-bottom, 0px)); background: #fff; border-top: 1px solid var(--divider); }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .tab .pill { padding: 4px 18px; border-radius: 999px; display: grid; place-items: center; }
+  .tab.on { color: var(--ink); }
+  .tab.on .pill { background: var(--blush); color: var(--tomato-deep); }
+  .tab svg.ic { width: 22px; height: 22px; }
+
+  /* type + bits */
+  h1, h2, h3 { margin: 0; text-wrap: balance; }
+  .h-disp { font: 400 30px/1.1 var(--disp); }
+  .m-desk .h-disp { font-size: 38px; }
+  .h-sec { font: 400 22px/1.15 var(--disp); }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .muted { color: var(--muted); }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .grow { flex: 1; min-width: 0; }
+  .av { width: 28px; height: 28px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; box-shadow: 0 0 0 2px var(--bg); flex: none; }
+  .avatars { display: flex; }
+  .avatars .av + .av { margin-left: -8px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 11px 18px; border-radius: 999px; font-weight: 700; transition: transform .12s ease, background .12s ease; }
+  .btn:active { transform: scale(.97); }
+  .btn.primary { background: var(--tomato); color: #fff; box-shadow: 0 6px 14px -6px rgba(232,67,44,.6); }
+  .btn.primary:hover { background: var(--tomato-deep); }
+  .btn.cream { background: #fff4ec; color: var(--ink); }
+  .btn.outline { border: 1.5px solid #e2cfc4; background: transparent; }
+  .btn.outline:hover { background: var(--soft); }
+  .btn.ghost { color: var(--muted); }
+  .btn.block { width: 100%; }
+  .btn[disabled] { opacity: .45; pointer-events: none; }
+  .iconbtn { width: 38px; height: 38px; border-radius: 999px; display: grid; place-items: center; background: #fff; box-shadow: 0 0 0 1px var(--edge); flex: none; }
+  .iconbtn:hover { background: var(--soft); }
+  .iconbtn.primary { background: var(--tomato); color: #fff; box-shadow: none; }
+  .panel { background: #fff; border-radius: 22px; box-shadow: 0 0 0 1px var(--edge); }
+
+  /* ---------- Sign in ---------- */
+  .signin { flex: 1; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 32px 22px; }
+  .m-phone .signin.top { justify-content: flex-start; padding-top: 12%; }
+  .signin-inner { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 26px; }
+  .signin .brand { font-size: 46px; }
+  .who { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 18px 8px; }
+  .person { display: flex; flex-direction: column; align-items: center; gap: 8px; font-weight: 700; border-radius: 20px; padding: 6px 0; }
+  .person:hover .big { transform: translateY(-2px) rotate(-2deg); }
+  .big { width: 76px; height: 76px; border-radius: 28px; display: grid; place-items: center; font: 400 36px/1 var(--disp); color: #fff; transition: transform .15s ease; }
+  .big.add { background: transparent; color: var(--muted); border: 2px dashed #d9bfb1; font-family: var(--body); font-weight: 400; }
+  .pinhead { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+  .pinbox { position: relative; display: flex; justify-content: center; cursor: text; }
+  .pinbox input { position: absolute; inset: 0; width: 100%; opacity: 0; font-size: 16px; caret-color: transparent; border: 0; }
+  .cells { display: flex; gap: 12px; }
+  .cells i { width: 58px; height: 66px; border-radius: 18px; background: #fff; box-shadow: 0 0 0 1.5px var(--edge); display: grid; place-items: center; transition: box-shadow .12s ease; }
+  .cells i.on::after { content: ""; width: 14px; height: 14px; border-radius: 99px; background: var(--ink); }
+  .pinbox:focus-within .cells i.cur { box-shadow: 0 0 0 2.5px var(--tomato); }
+  .pinbox:has(input:focus-visible) { outline: none; }
+  .note-box { font-size: 13px; background: #fff; border-radius: 14px; padding: 10px 12px; box-shadow: 0 0 0 1px var(--edge); color: #6d5249; display: flex; gap: 8px; }
+
+  /* ---------- Home ---------- */
+  .start { background: var(--tomato); color: #fff4ec; border-radius: 30px; padding: 22px; display: flex; flex-direction: column; gap: 16px; position: relative; overflow: hidden; }
+  .start h2 { font: 400 30px/1.05 var(--disp); max-width: 12ch; }
+  .m-desk .start { padding: 32px; }
+  .m-desk .start h2 { font-size: 42px; }
+  .setchip { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px; background: rgba(255,255,255,.18); font-weight: 700; }
+  .setchip small { font-weight: 500; opacity: .8; }
+  .start .plate { position: absolute; right: -40px; bottom: -40px; width: 170px; height: 170px; border-radius: 999px; background: var(--mustard); opacity: .95; }
+  .start .plate::after { content: ""; position: absolute; inset: 26px; border-radius: 99px; border: 3px dashed rgba(42,23,18,.25); }
+  .start > *:not(.plate) { position: relative; }
+  .home-grid { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+  .home-grid > * { min-width: 0; }
+  .m-desk .home-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+  .list { display: flex; flex-direction: column; }
+  .li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--divider); text-align: left; width: 100%; }
+  .li:first-child { border-top: 0; }
+  button.li:hover { background: #fffaf6; }
+  .li .t b { display: block; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .li .t small { color: var(--muted); font-size: 13px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; font: 400 20px/1 var(--disp); flex: none; background: var(--c); color: var(--on); }
+
+  /* ---------- Session ---------- */
+  .sess { display: grid; gap: 20px; }
+  .m-desk .sess { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+  .shead { display: flex; align-items: center; gap: 10px; }
+  .shead h1 { font: 400 24px/1.15 var(--disp); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-desk .shead h1 { font-size: 30px; }
+  .seg { display: flex; padding: 3px; border-radius: 999px; background: var(--soft); gap: 2px; }
+  .seg button { flex: 1; text-align: center; padding: 7px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .seg button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 2px 6px -2px rgba(42,23,18,.25); }
+  .meta { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+  .meta b { font-variant-numeric: tabular-nums; }
+  .waiting { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 18px; background: #fff; box-shadow: 0 0 0 1px var(--edge); font-size: 14px; }
+
+  .pair { display: flex; flex-direction: column; }
+  .m-desk .pair { flex-direction: row; }
+  .pair > .card { flex: 1; }
+  .or { align-self: center; position: relative; margin: -17px 0; z-index: 2; width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; background: var(--ink); color: var(--mustard); font: 800 13px/1 var(--body); letter-spacing: .04em; box-shadow: 0 0 0 5px var(--bg); pointer-events: none; }
+  .m-desk .or { margin: 0 -17px; }
+  .card { position: relative; border-radius: 28px; padding: 18px 18px 24px; display: flex; flex-direction: column; gap: 5px; background: var(--c); color: var(--on); text-align: left; min-height: 170px; transition: transform .2s ease, opacity .2s ease, box-shadow .2s ease; }
+  .pair > .card + .or + .card { padding-top: 28px; }
+  .m-phone .pair > .card:first-child { padding-bottom: 32px; }
+  .m-desk .card { padding: 28px; min-height: 280px; border-radius: 34px; }
+  .card .pickbtn { position: absolute; inset: 0; border-radius: inherit; z-index: 0; }
+  .card:hover { transform: translateY(-2px); }
+  .card > *:not(.pickbtn) { position: relative; z-index: 1; pointer-events: none; }
+  .card > .veto, .card .pills a { pointer-events: auto; }
+  .card h3 { font: 400 25px/1.08 var(--disp); padding-right: 40px; }
+  .m-desk .card h3 { font-size: 40px; }
+  .card .sub { opacity: .82; }
+  .card .quote { font-style: italic; opacity: .9; font-size: 14px; }
+  .card .pills { margin-top: auto; padding-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .card .pills > * { background: var(--pill); border-radius: 999px; padding: 5px 11px; font-size: 13px; font-weight: 700; display: inline-flex; gap: 5px; align-items: center; text-decoration: none; color: inherit; }
+  .card .pills a:hover { background: var(--pill-hover); }
+  .card .veto { position: absolute; top: 14px; right: 14px; width: 36px; height: 36px; border-radius: 999px; display: grid; place-items: center; background: var(--pill); color: inherit; }
+  .card .veto:hover { background: var(--pill-hover); }
+  .card.chosen { transform: scale(1.03); box-shadow: 0 0 0 4px var(--bg), 0 0 0 7px var(--c), 0 22px 36px -16px rgba(0,0,0,.35); }
+  .card.lost { opacity: .35; transform: scale(.97); }
+  .card.enter { animation: enter .32s cubic-bezier(.2,.8,.3,1.2) both; }
+  .pair > .card.enter:last-child { animation-delay: .05s; }
+  @keyframes enter { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+  .actions { display: flex; justify-content: center; align-items: center; gap: 16px; }
+  .kbd { font-size: 12px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; }
+  .kbd kbd { font: 700 11px/1 var(--body); border-radius: 5px; padding: 3px 6px; background: #fff; box-shadow: 0 0 0 1px var(--edge), 0 1px 0 1px var(--edge); }
+  .m-phone .kbd { display: none; }
+  .empty { text-align: center; padding: 34px 20px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .empty .blob { width: 76px; height: 76px; border-radius: 26px; background: var(--mustard); display: grid; place-items: center; font: 400 34px/1 var(--disp); rotate: -6deg; }
+
+  /* leaderboard */
+  .board { display: flex; flex-direction: column; gap: 12px; }
+  .m-desk .board { position: sticky; top: 0; }
+  .hero { border-radius: 24px; padding: 16px 18px; display: flex; flex-direction: column; gap: 5px; background: var(--mustard); }
+  .hero .kicker { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .hero h3 { font: 400 24px/1.08 var(--disp); }
+  .hero .line { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+  .hero .chip { background: rgba(255,255,255,.55); }
+  .rank { width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center; font: 800 12px/1 var(--body); font-variant-numeric: tabular-nums; color: var(--muted); flex: none; }
+  .rank.m2 { background: #ececec; color: var(--ink); } .rank.m3 { background: #f6d2b4; color: var(--ink); }
+  .move { font-size: 10px; width: 12px; text-align: center; color: var(--up); flex: none; }
+  .chips { display: flex; gap: 3px; flex: none; }
+  .chip { min-width: 24px; height: 21px; padding: 0 5px; border-radius: 7px; display: grid; place-items: center; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; background: #f6ebe3; }
+  .chip.low { background: var(--low); color: var(--low-ink); }
+  .li.vetoed .t b { text-decoration: line-through; opacity: .55; }
+  .stamp { white-space: nowrap; display: inline-block; rotate: -4deg; margin-top: 3px; border: 2px solid var(--stamp); color: var(--stamp); border-radius: 5px; padding: 0 5px; font: 800 9px/1.5 var(--body); letter-spacing: .12em; text-transform: uppercase; }
+  .legend { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+
+  /* places + sets */
+  .toolbar { display: flex; align-items: flex-end; gap: 12px; }
+  .toolbar .grow p { margin: 2px 0 0; }
+  .grid-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .place { display: flex; gap: 12px; padding: 14px; align-items: flex-start; }
+  .place .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .place .t b { font-weight: 700; }
+  .place .t small { color: var(--muted); }
+  .place .t i { font-size: 13px; color: #6d5249; }
+  .pending { display: inline-flex; gap: 6px; align-items: center; }
+  .pending::before { content: ""; width: 8px; height: 8px; border-radius: 99px; background: var(--mustard); animation: pulse 1s infinite alternate; }
+  @keyframes pulse { to { opacity: .3; } }
+  .setcard { display: flex; flex-direction: column; gap: 14px; padding: 18px; text-align: left; border-radius: 24px; background: #fff; box-shadow: 0 0 0 1px var(--edge); transition: transform .15s ease; }
+  .setcard:hover { transform: translateY(-2px); }
+  .fan { display: flex; height: 44px; }
+  .fan .tile { box-shadow: 0 0 0 3px #fff; }
+  .fan .tile + .tile { margin-left: -6px; }
+  .setcard b { font: 400 22px/1.1 var(--disp); }
+  .badge { font-size: 11px; font-weight: 700; background: var(--soft); color: var(--muted); padding: 2px 8px; border-radius: 99px; }
+  .setcard.new { border: 2px dashed #e2cfc4; box-shadow: none; background: transparent; align-items: center; justify-content: center; color: var(--muted); font-weight: 700; min-height: 150px; }
+
+  /* places library */
+  .lib { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .rail { padding: 8px; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; }
+  .railrow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px; width: 100%; text-align: left; }
+  .railrow:hover { background: #fffaf6; }
+  .railrow.on { background: var(--blush); }
+  .railrow b { font-weight: 700; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .railrow small { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .railrow .tile { width: 32px; height: 32px; border-radius: 10px; font-size: 15px; }
+  .railrow .tile svg.ic { width: 16px; height: 16px; }
+  .railrow.add { color: var(--muted); font-weight: 700; border-top: 1px solid var(--divider); border-radius: 0 0 14px 14px; margin-top: 4px; padding-top: 12px; }
+  .detail { display: flex; flex-direction: column; gap: 14px; }
+  .placeli { align-items: flex-start; }
+  .placeli .t i { font-size: 13px; color: #6d5249; display: block; margin-top: 2px; }
+  .schips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .schip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--soft); color: var(--muted); }
+  .m-phone .toolbar .btn.ghost .lbl { display: none; }
+  .m-phone .toolbar .btn.ghost { padding: 11px; }
+  .lbl-like { font-size: 13px; font-weight: 700; }
+  .opt.check[aria-disabled="true"] { opacity: .6; box-shadow: 0 0 0 1.5px var(--edge); }
+  .opt.check[aria-disabled="true"] .tick { background: var(--muted); border-color: var(--muted); }
+  .opt[hidden] { display: none; }
+  .newset-inline { display: flex; gap: 8px; align-items: center; background: #fff; border-radius: 18px; box-shadow: 0 0 0 1.5px var(--edge); padding: 6px 6px 6px 14px; }
+  .newset-inline:focus-within { box-shadow: 0 0 0 2px var(--tomato); }
+  .newset-inline input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 15px; padding: 6px 0; }
+  .actsheet a { padding: 14px 6px; border-top: 1px solid var(--divider); display: flex; gap: 10px; align-items: center; font-weight: 600; color: inherit; text-decoration: none; }
+  .actsheet small { font-weight: 500; max-width: 50%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .setcard .fan .tile { width: 30px; height: 30px; border-radius: 10px; font-size: 14px; }
+  .setcard .row > .tile { width: 44px; height: 44px; }
+
+  /* settings */
+  .group { display: flex; flex-direction: column; gap: 6px; }
+  .group > .eyebrow { padding: 0 6px; }
+  .srow { display: flex; align-items: center; gap: 12px; padding: 14px; width: 100%; text-align: left; border-top: 1px solid var(--divider); }
+  .srow:first-child { border-top: 0; }
+  .srow:hover { background: #fffaf6; }
+  .srow .ico { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--blush); color: var(--tomato-deep); flex: none; }
+  .srow .grow { white-space: nowrap; }
+  .srow .val { color: var(--muted); font-size: 14px; max-width: 45%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow.danger { color: var(--stamp); justify-content: center; font-weight: 700; }
+  .profile { display: flex; align-items: center; gap: 14px; }
+  .profile .big { width: 64px; height: 64px; border-radius: 22px; font-size: 28px; }
+  .m-desk .settings { max-width: 560px; }
+
+  /* sheets */
+  .scrim { position: absolute; inset: 0; background: rgba(42,23,18,.38); z-index: 20; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fade .18s ease both; }
+  .m-phone .scrim { align-items: flex-end; padding: 0; }
+  .sheet { background: var(--bg); width: 100%; max-width: 460px; max-height: 88%; overflow-y: auto; border-radius: 28px; padding: 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 30px 60px -20px rgba(0,0,0,.45); animation: rise .24s cubic-bezier(.2,.8,.3,1) both; }
+  .m-phone .sheet { max-width: none; border-radius: 28px 28px 0 0; padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px)); }
+  .m-phone .sheet::before { content: ""; align-self: center; width: 40px; height: 5px; border-radius: 9px; background: #e2cfc4; margin: -8px 0 2px; }
+  .sheet .head { display: flex; align-items: center; gap: 10px; }
+  .sheet .head h2 { flex: 1; font: 400 24px/1.1 var(--disp); }
+  @keyframes fade { from { opacity: 0; } }
+  @keyframes rise { from { transform: translateY(30px); opacity: 0; } }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 13px; font-weight: 700; }
+  .field .box { display: flex; gap: 8px; align-items: center; background: #fff; border-radius: 16px; box-shadow: 0 0 0 1.5px var(--edge); padding: 4px 4px 4px 14px; }
+  .field .box:focus-within { box-shadow: 0 0 0 2px var(--tomato); }
+  .field input[type=text], .field input[type=url] { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; padding: 10px 0; font-size: 16px; }
+  .field .hint { font-size: 12px; color: var(--muted); }
+  .field .err { font-size: 13px; color: var(--stamp); font-weight: 600; }
+  .smallbtn { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; padding: 8px 12px; border-radius: 12px; background: var(--soft); font-weight: 700; font-size: 13px; }
+  .opt { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 18px; background: #fff; box-shadow: 0 0 0 1.5px var(--edge); text-align: left; width: 100%; }
+  .opt[aria-checked="true"] { box-shadow: 0 0 0 2.5px var(--tomato); }
+  .opt .tick { width: 24px; height: 24px; border-radius: 99px; border: 2px solid #e2cfc4; display: grid; place-items: center; flex: none; color: #fff; }
+  .opt[aria-checked="true"] .tick { background: var(--tomato); border-color: var(--tomato); }
+  .opt.check .tick { border-radius: 8px; }
+  .opts { display: flex; flex-direction: column; gap: 8px; }
+  .actsheet { display: flex; flex-direction: column; }
+  .actsheet button { padding: 14px 6px; text-align: left; font-weight: 600; border-top: 1px solid var(--divider); display: flex; gap: 10px; align-items: center; }
+  .actsheet button:first-child { border-top: 0; }
+  .actsheet .danger { color: var(--stamp); }
+
+  /* toast */
+  .toast { position: absolute; left: 50%; translate: -50% 0; bottom: 18px; z-index: 15; width: min(420px, calc(100% - 24px)); display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 18px; background: var(--ink); color: #fff4ec; font-size: 14px; box-shadow: 0 14px 30px -10px rgba(0,0,0,.5); animation: rise .22s ease both; }
+  .m-phone .toast { bottom: 88px; }
+  .m-phone.no-tabs .toast { bottom: 18px; }
+  .toast span { flex: 1; }
+  .toast button { color: var(--mustard); font-weight: 800; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  }
+  ::view-transition-group(*) { animation-duration: .35s; }
+</style>
+
+<div class="proto" role="toolbar" aria-label="Prototype controls">
+  <b>Prototype</b>
+  <span>View as</span>
+  <div class="grp">
+    <button data-view="auto" aria-pressed="true">Auto</button>
+    <button data-view="phone" aria-pressed="false">Phone</button>
+    <button data-view="desk" aria-pressed="false">Desktop</button>
+  </div>
+  <span class="sp"></span>
+  <span class="hint">Any PIN works · Bob and Cam pick on their own every few seconds</span>
+  <button class="grp" data-reset style="padding:4px 12px;font-weight:600">Reset</button>
+</div>
+<div class="stage"><div id="app"></div></div>
+
+<script>
+/* ---------- Icons ---------- */
+const ICON = {
+  tram: '<path d="M6 16V7a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2Z"/><path d="M6 11h12M9 4l-1-2M15 4l1-2M8 22l1.5-4M16 22l-1.5-4"/>',
+  ban: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+  share: '<path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/>',
+  back: '<path d="m15 18-6-6 6-6"/>',
+  pick: '<rect x="4" y="3" width="16" height="7" rx="2"/><rect x="4" y="14" width="16" height="7" rx="2"/>',
+  places: '<path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12Z"/><circle cx="12" cy="9" r="2.5"/>',
+  sets: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+  you: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  crown: '<path d="m3 8 4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8Z"/>',
+  ext: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  check: '<path d="m5 12 5 5 9-10"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  right: '<path d="m9 6 6 6-6 6"/>',
+  home: '<path d="M4 11 12 4l8 7v9H4z"/><path d="M10 20v-5h4v5"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  upload: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  back2: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+};
+const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+/* ---------- Example data ---------- */
+const SWATCH = [
+  { c: '#e8432c', on: '#fff4ec' }, { c: '#ffc93c', on: '#2a1712' }, { c: '#1f8a70', on: '#fff4ec' },
+  { c: '#6a3d6e', on: '#fff4ec' }, { c: '#ff8a5b', on: '#2a1712' }, { c: '#2f5d9e', on: '#fff4ec' },
+];
+const SUBURBS = ['Collingwood', 'Northcote', 'Prahran', 'Brunswick East', 'Thornbury'];
+
+function seed() {
+  const people = [
+    { id: 1, name: 'Alice', color: '#e8432c', home: '12 Smith St, Collingwood' },
+    { id: 2, name: 'Bob', color: '#2f5d9e', home: '' },
+    { id: 3, name: 'Cam', color: '#1f8a70', home: '' },
+  ];
+  const places = [
+    ['Invented Dumpling House', 'Melbourne CBD', 'Ask for the secret menu', 18],
+    ['Imaginary Taqueria', 'Fitzroy', 'Late night option', 24],
+    ['Pretend Ramen Bar', 'Carlton', 'Queue moves fast', 21],
+    ['Make-Believe Pizzeria', 'Brunswick', '', 32],
+    ['Mock Laksa Co.', 'Footscray', 'Bring cash', 38],
+    ['Fictional Pho', 'Richmond', '', 27],
+    ['Totally Fake Bistro', 'Collingwood', 'Book ahead on Fridays', 9],
+    ['Sample Souvlaki', 'Oakleigh', 'Huge portions', 44],
+    ['Placeholder Yum Cha', 'Box Hill', 'Weekends only', 41],
+  ].map(([name, suburb, note, mins], i) => ({ id: i + 1, name, suburb, note, mins, sw: i % SWATCH.length }));
+  const sets = [
+    { id: 'all', name: 'All places', builtIn: true },
+    { id: 2, name: 'Date night', placeIds: [1, 2, 3, 4, 6, 7] },
+    { id: 3, name: 'Cheap eats', placeIds: [1, 5, 6, 8] },
+  ];
+  const now = Date.now();
+  const sessions = [
+    newSession('s-friday', 2, [1, 2, 3], now - 86400e3 * 2, places),
+    newSession('s-lunch', 3, [1, 3], now - 86400e3 * 9, places),
+  ];
+  // Give the past sessions some history so their boards aren't flat.
+  for (const s of sessions) for (let i = 0; i < 40; i++) simulatePick(s, s.members[i % s.members.length], { sets, places });
+  return { people, places, sets, sessions, nextId: 100 };
+}
+
+function newSession(id, setId, members, createdAt, places) {
+  const ratings = {};
+  for (const m of members) ratings[m] = Object.fromEntries(places.map((p) => [p.id, 1000]));
+  return { id, setId, members: [...members], picks: Object.fromEntries(members.map((m) => [m, 0])), ratings, vetoes: {}, createdAt, lastOrder: [] };
+}
+
+let db;
+const ui = {
+  me: null, view: 'auto', route: 'home', sessionId: null, setId: null, sessionTab: 'pick', boardTab: 'together',
+  signin: { step: 'who', who: null, pin: '', name: '' }, startSetId: 2,
+  sheet: null, toast: null, pair: null, chosen: null, enter: true, moved: new Set(),
+};
+
+/* ---------- Ranking model ---------- */
+const byId = (list, id) => list.find((x) => String(x.id) === String(id));
+const person = (id) => byId(db.people, id);
+const place = (id) => byId(db.places, id);
+const setOf = (id) => byId(db.sets, id);
+const setPlaceIds = (set) => (set.builtIn ? db.places.map((p) => p.id) : set.placeIds);
+const session = () => byId(db.sessions, ui.sessionId);
+const activeIds = (s) => setPlaceIds(setOf(s.setId)).filter((id) => place(id) && !s.vetoes[id]);
+
+function recordPick(s, who, a, b, winner) {
+  const r = s.ratings[who];
+  const exp = 1 / (1 + 10 ** ((r[b] - r[a]) / 400));
+  const score = winner === a ? 1 : winner === b ? 0 : 0.5;
+  r[a] += 32 * (score - exp);
+  r[b] -= 32 * (score - exp);
+  s.picks[who]++;
+}
+
+function simulatePick(s, who, data = db) {
+  const ids = setPlaceIds(byId(data.sets, s.setId)).filter((id) => !s.vetoes[id]);
+  if (ids.length < 2) return;
+  const a = ids[Math.floor(Math.random() * ids.length)];
+  let b = a;
+  while (b === a) b = ids[Math.floor(Math.random() * ids.length)];
+  // Each person has a hidden taste so their rankings diverge believably.
+  const taste = (id) => ((id * (who + 3) * 7) % 11) + Math.random() * 4;
+  recordPick(s, who, a, b, taste(a) >= taste(b) ? a : b);
+}
+
+function personalRanking(s, who) {
+  const ids = setPlaceIds(setOf(s.setId)).filter((id) => place(id));
+  return ids.sort((x, y) => s.ratings[who][y] - s.ratings[who][x]);
+}
+
+function combined(s) {
+  const n = setPlaceIds(setOf(s.setId)).length;
+  const pos = Object.fromEntries(s.members.map((m) => [m, personalRanking(s, m)]));
+  const rows = setPlaceIds(setOf(s.setId)).filter((id) => place(id)).map((id) => {
+    const ranks = s.members.map((m) => pos[m].indexOf(id) + 1);
+    return {
+      id, ranks,
+      low: s.members.map((m, i) => ranks[i] > Math.ceil((n * 2) / 3)),
+      avg: ranks.reduce((a, b) => a + b, 0) / ranks.length,
+      vetoedBy: s.vetoes[id],
+    };
+  });
+  return rows.sort((a, b) => (!!a.vetoedBy - !!b.vetoedBy) || a.avg - b.avg);
+}
+
+function nextPair(s) {
+  const ids = activeIds(s);
+  if (ids.length < 2) return null;
+  const shuffled = [...ids].sort(() => Math.random() - 0.5);
+  const [a, b] = shuffled;
+  if (ui.pair && ui.pair.includes(a) && ui.pair.includes(b) && ids.length > 2) return [shuffled[0], shuffled[2]];
+  return [a, b];
+}
+
+/* ---------- Small view helpers ---------- */
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+const avatar = (p) => `<span class="av" style="background:${p.color}" title="${esc(p.name)}">${esc(p.name[0])}</span>`;
+const avatars = (ids) => `<span class="avatars">${ids.map((id) => avatar(person(id))).join('')}</span>`;
+const tile = (p) => `<span class="tile" style="--c:${SWATCH[p.sw].c};--on:${SWATCH[p.sw].on}">${esc(p.name[0])}</span>`;
+const ago = (t) => {
+  const d = Math.round((Date.now() - t) / 86400e3);
+  return d === 0 ? 'Today' : d === 1 ? 'Yesterday' : `${d} days ago`;
+};
+const isPhone = () => ui.view === 'phone' || (ui.view === 'auto' && innerWidth < 760);
+const mapsUrl = (p) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + ' ' + p.suburb)}`;
+
+/* ---------- Screens ---------- */
+function signInScreen() {
+  const st = ui.signin;
+  if (st.step === 'pin' || st.step === 'new-pin') {
+    const who = st.step === 'pin' ? person(st.who) : { name: st.name, color: '#6a3d6e' };
+    return `<div class="signin top"><div class="signin-inner">
+      <div class="pinhead">
+        <span class="big" style="background:${who.color}">${esc(who.name[0])}</span>
+        <h1 class="h-sec">${st.step === 'pin' ? `Hey ${esc(who.name)}, your PIN?` : 'Pick a 4-digit PIN'}</h1>
+      </div>
+      ${pinField()}
+      ${st.step === 'new-pin' ? `<div class="note-box">${ic('lock')}<span>A light lock to keep friends out of each other's rankings. Don't reuse a bank or phone PIN.</span></div>` : ''}
+      <button class="btn ghost" data-act="signin-back">${st.step === 'pin' ? `Not ${esc(who.name)}?` : 'Back'}</button>
+    </div></div>`;
+  }
+  if (st.step === 'new-name') {
+    return `<div class="signin"><div class="signin-inner">
+      <h1 class="h-disp">What should we call you?</h1>
+      <form data-form="new-name" class="field">
+        <label for="f-name">Your name</label>
+        <div class="box"><input id="f-name" type="text" maxlength="40" autocomplete="nickname" value="${esc(st.name)}" required></div>
+        <span class="hint">It's how you'll show up on everyone's leaderboard.</span>
+        <div style="height:10px"></div>
+        <button class="btn primary block">Continue</button>
+      </form>
+      <button class="btn ghost" data-act="signin-back">Back</button>
+    </div></div>`;
+  }
+  return `<div class="signin"><div class="signin-inner">
+    <div><div class="brand">So Where?</div><p class="muted" style="margin:8px 0 0">Where should we eat? Let's actually decide.</p></div>
+    <h1 class="h-disp">Who's hungry?</h1>
+    <div class="who">
+      ${db.people.map((p) => `<button class="person" data-act="choose-person" data-id="${p.id}"><span class="big" style="background:${p.color}">${esc(p.name[0])}</span>${esc(p.name)}</button>`).join('')}
+      <button class="person" data-act="new-person"><span class="big add">${ic('plus')}</span>I'm new here</button>
+    </div>
+  </div></div>`;
+}
+
+/* A real input (numeric keyboard on phones, typing on desktop) drawn as four cells. */
+function pinField() {
+  return `<label class="pinbox">
+    <input id="f-pin" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="4-digit PIN">
+    <span class="cells" aria-hidden="true">${[0, 1, 2, 3].map(() => '<i></i>').join('')}</span>
+  </label>`;
+}
+
+function showPinDigits(input) {
+  input.value = input.value.replace(/\D/g, '').slice(0, 4);
+  input.parentElement.querySelectorAll('.cells i').forEach((cell, i) => {
+    cell.classList.toggle('on', i < input.value.length);
+    cell.classList.toggle('cur', i === Math.min(input.value.length, 3));
+  });
+}
+
+function homeScreen() {
+  const set = setOf(ui.startSetId);
+  const recent = [...db.sessions].sort((a, b) => b.createdAt - a.createdAt);
+  return `<div class="page">
+    <h1 class="h-disp">Where to, ${esc(ui.me.name)}?</h1>
+    <div class="home-grid">
+      <section class="start" aria-label="Start picking">
+        <span class="plate" aria-hidden="true"></span>
+        <h2>Let's pick somewhere.</h2>
+        <button class="setchip" data-act="open-sheet" data-sheet="choose-set">${esc(set.name)} <small>${plural(setPlaceIds(set).length, 'place')}</small> ${ic('down')}</button>
+        <button class="btn cream" style="align-self:flex-start" data-act="start">Start picking ${ic('right')}</button>
+        <span style="font-size:13px;opacity:.85">You'll get a link so everyone picks on their own phone.</span>
+      </section>
+      <section class="group" aria-label="Recent sessions">
+        <span class="eyebrow">Recent</span>
+        <div class="panel list">
+          ${recent.map((s) => {
+            const top = combined(s)[0];
+            return `<button class="li" data-act="open-session" data-id="${s.id}">
+              ${tile(place(top.id))}
+              <span class="t grow"><b>${esc(setOf(s.setId).name)}</b><small>Top: ${esc(place(top.id).name)} · ${ago(s.createdAt)}</small></span>
+              ${avatars(s.members)}
+            </button>`;
+          }).join('')}
+        </div>
+      </section>
+    </div>
+  </div>`;
+}
+
+function sessionScreen() {
+  const s = session();
+  const phone = isPhone();
+  const others = s.members.filter((m) => m !== ui.me.id);
+  const header = `<div class="shead">
+    ${phone ? `<button class="iconbtn" data-act="go" data-to="home" aria-label="Back">${ic('back')}</button>` : ''}
+    <div class="grow"><div class="eyebrow">Picking from</div><h1>${esc(setOf(s.setId).name)}</h1></div>
+    ${avatars(s.members)}
+    ${phone ? `<button class="iconbtn primary" data-act="open-sheet" data-sheet="share" aria-label="Share">${ic('share')}</button>`
+      : `<button class="btn primary" data-act="open-sheet" data-sheet="share">${ic('share')}Share link</button>`}
+  </div>`;
+  const waiting = others.length === 0 ? `<div class="waiting">${ic('share')}<span class="grow">Just you so far. Share the link so friends can pick too.</span><button class="smallbtn" data-act="open-sheet" data-sheet="share">Share</button></div>` : '';
+  const tabs = phone ? `<div class="seg" role="group" aria-label="Session view">
+      <button aria-pressed="${ui.sessionTab === 'pick'}" data-act="session-tab" data-tab="pick">Pick</button>
+      <button aria-pressed="${ui.sessionTab === 'board'}" data-act="session-tab" data-tab="board">Leaderboard</button></div>` : '';
+  const showPick = !phone || ui.sessionTab === 'pick';
+  const showBoard = !phone || ui.sessionTab === 'board';
+  return `<div class="page">
+    ${header}${tabs}${waiting}
+    <div class="sess">
+      ${showPick ? `<section aria-label="Pick" style="display:flex;flex-direction:column;gap:14px">${picker(s)}</section>` : ''}
+      ${showBoard ? `<aside aria-label="Leaderboard">${phone ? '' : '<div class="eyebrow" style="margin-bottom:10px">Live leaderboard</div>'}${board(s)}</aside>` : ''}
+    </div>
+  </div>`;
+}
+
+function picker(s) {
+  if (!ui.pair || !ui.pair.every((id) => place(id) && !s.vetoes[id])) ui.pair = nextPair(s);
+  const picks = s.picks[ui.me.id];
+  const meta = `<div class="meta"><span class="muted">${isPhone() ? 'Tap' : 'Click'} the one you'd rather</span><span><b>${picks}</b> <span class="muted">${picks === 1 ? 'pick' : 'picks'}</span></span></div>`;
+  if (!ui.pair) {
+    return `${meta}<div class="panel empty"><span class="blob">?</span><b>Not enough places left to compare</b><span class="muted">Add places to this set, or undo an "Absolutely not".</span></div>`;
+  }
+  const [a, b] = ui.pair.map(place);
+  return `${meta}
+    <div class="pair">${placeCard(a)}<span class="or" aria-hidden="true">OR</span>${placeCard(b)}</div>
+    <div class="actions">
+      <span class="kbd"><kbd>←</kbd><kbd>→</kbd> pick</span>
+      <button class="btn outline" data-act="tie">Too close to call</button>
+      <span class="kbd"><kbd>↓</kbd> tie</span>
+    </div>`;
+}
+
+function placeCard(p) {
+  const sw = SWATCH[p.sw];
+  const dark = sw.on === '#2a1712';
+  const cls = ui.chosen == null ? (ui.enter ? ' enter' : '') : ui.chosen === p.id ? ' chosen' : ' lost';
+  return `<article class="card${cls}" style="--c:${sw.c};--on:${sw.on};--pill:${dark ? 'rgba(42,23,18,.1)' : 'rgba(255,255,255,.2)'};--pill-hover:${dark ? 'rgba(42,23,18,.18)' : 'rgba(255,255,255,.32)'}">
+    <button class="pickbtn" data-act="pick" data-id="${p.id}" aria-label="Pick ${esc(p.name)}"></button>
+    <button class="veto" data-act="veto" data-id="${p.id}" aria-label="Absolutely not: ${esc(p.name)}" title="Absolutely not">${ic('ban')}</button>
+    <h3>${esc(p.name)}</h3>
+    <span class="sub">${esc(p.suburb)}</span>
+    ${p.note ? `<span class="quote">“${esc(p.note)}”</span>` : ''}
+    <div class="pills">
+      ${ui.me.home ? `<span>${ic('tram')} ${p.mins} min</span>` : ''}
+      <a href="${mapsUrl(p)}" target="_blank" rel="noreferrer">${ic('ext')} Maps</a>
+    </div>
+  </article>`;
+}
+
+function board(s) {
+  const rows = combined(s);
+  const order = rows.map((r) => r.id);
+  const tabs = `<div class="seg" role="group" aria-label="Whose ranking">
+    <button aria-pressed="${ui.boardTab === 'together'}" data-act="board-tab" data-tab="together">Together</button>
+    ${s.members.map((m) => `<button aria-pressed="${ui.boardTab === m}" data-act="board-tab" data-tab="${m}">${esc(person(m).name)}</button>`).join('')}
+  </div>`;
+  const solo = s.members.length === 1;
+  if (!solo && ui.boardTab !== 'together' && s.members.includes(ui.boardTab)) {
+    const who = ui.boardTab;
+    const list = personalRanking(s, who);
+    return `<div class="board">${tabs}
+      <div class="meta"><span class="muted">${esc(person(who).name)}'s ranking</span><span><b>${s.picks[who]}</b> <span class="muted">${s.picks[who] === 1 ? 'pick' : 'picks'}</span></span></div>
+      <div class="panel list">${list.map((id, i) => {
+        const vetoed = s.vetoes[id];
+        return `<div class="li${vetoed ? ' vetoed' : ''}" style="view-transition-name:p${id}">
+          <span class="rank ${!vetoed && i && i < 3 ? 'm' + (i + 1) : ''}" style="${!vetoed && i === 0 ? 'background:var(--mustard);color:var(--ink)' : ''}">${i + 1}</span>
+          <span class="t grow"><b>${esc(place(id).name)}</b>${vetoed ? `<span class="stamp">Absolutely not · ${esc(person(vetoed).name)}</span>` : `<small>${esc(place(id).suburb)}</small>`}</span>
+        </div>`;
+      }).join('')}</div></div>`;
+  }
+  const [top, ...rest] = rows;
+  const chips = (r) => `<span class="chips">${s.members.map((m, j) => `<span class="chip${r.low[j] ? ' low' : ''}" title="${esc(person(m).name)}: #${r.ranks[j]}">${esc(person(m).name[0])}${r.ranks[j]}</span>`).join('')}</span>`;
+  const firstLow = rows.find((r) => !r.vetoedBy && r.low.some(Boolean));
+  const lowWho = firstLow ? s.members[firstLow.low.indexOf(true)] : null;
+  return `<div class="board">${solo ? '' : tabs}
+    <div class="hero" style="view-transition-name:p${top.id}">
+      <div class="kicker">${ic('crown')} Top pick</div>
+      <h3>${esc(place(top.id).name)}</h3>
+      <div class="line"><span>${esc(place(top.id).suburb)}</span>${s.members.length > 1 ? chips(top) : ''}</div>
+    </div>
+    <div class="panel list">${rest.map((r, i) => {
+      const pos = i + 2;
+      return `<div class="li${r.vetoedBy ? ' vetoed' : ''}" style="view-transition-name:p${r.id};padding:9px 12px">
+        <span class="rank ${!r.vetoedBy && pos <= 3 ? 'm' + pos : ''}">${r.vetoedBy ? '–' : pos}</span>
+        <span class="move">${ui.moved.has(r.id) ? '▲' : ''}</span>
+        <span class="t grow"><b>${esc(place(r.id).name)}</b>${r.vetoedBy ? `<span class="stamp">Absolutely not · ${esc(person(r.vetoedBy).name)}</span>` : `<small>${esc(place(r.id).suburb)}</small>`}</span>
+        ${s.members.length > 1 ? chips(r) : ''}
+      </div>`;
+    }).join('')}</div>
+    ${lowWho && !solo ? `<div class="legend"><span class="chip low">${esc(person(lowWho).name[0])}</span> means it's in ${esc(person(lowWho).name)}'s bottom third</div>` : ''}
+  </div>`;
+}
+
+/* Places tab: sets are the way places are organised. "All places" is pinned first. */
+const namedSets = () => db.sets.filter((s) => !s.builtIn);
+const setsWith = (placeId) => namedSets().filter((s) => s.placeIds.includes(placeId));
+const setTile = (s, i) => s.builtIn
+  ? `<span class="tile" style="--c:var(--ink);--on:var(--mustard)">${ic('places')}</span>`
+  : `<span class="tile" style="--c:${SWATCH[(s.id + 1) % SWATCH.length].c};--on:${SWATCH[(s.id + 1) % SWATCH.length].on}">${esc(s.name[0])}</span>`;
+
+function placesScreen() {
+  if (isPhone()) return `<div class="page">${ui.setId == null ? setsIndex() : setDetail(setOf(ui.setId))}</div>`;
+  const current = setOf(ui.setId ?? 'all') ?? setOf('all');
+  return `<div class="page">
+    ${placesHeader()}
+    <div class="lib">
+      <nav class="panel rail" aria-label="Sets">
+        ${db.sets.map((s, i) => `<button class="railrow${s === current ? ' on' : ''}" data-act="open-set" data-id="${s.id}" aria-current="${s === current}">
+          ${setTile(s, i)}<span class="grow"><b>${esc(s.name)}</b></span><small>${setPlaceIds(s).length}</small></button>`).join('')}
+        <button class="railrow add" data-act="open-sheet" data-sheet="new-set">${ic('plus')}<span class="grow">New set</span></button>
+      </nav>
+      <section class="grow">${setDetail(current)}</section>
+    </div>
+  </div>`;
+}
+
+function placesHeader() {
+  return `<div class="toolbar">
+    <div class="grow"><h1 class="h-disp">Places</h1><p class="muted">${plural(db.places.length, 'place')} in ${plural(namedSets().length, 'set')}</p></div>
+    <button class="btn ghost" data-act="open-sheet" data-sheet="import">${ic('upload')}<span class="lbl">Import</span></button>
+    <button class="btn primary" data-act="open-sheet" data-sheet="add-place">${ic('plus')}Add place</button>
+  </div>`;
+}
+
+function setsIndex() {
+  const few = db.places.length < 5;
+  return `${placesHeader()}
+    <div class="grid-cards">
+      ${db.sets.map((s, i) => {
+        const ids = setPlaceIds(s);
+        return `<button class="setcard" data-act="open-set" data-id="${s.id}">
+          <span class="row">${setTile(s, i)}<span class="fan">${ids.slice(0, 4).map((id) => tile(place(id))).join('')}</span></span>
+          <b>${esc(s.name)}</b>
+          <span class="muted" style="font-size:14px">${plural(ids.length, 'place')}${s.builtIn ? ' · everything you\'ve added' : ''}</span>
+        </button>`;
+      }).join('')}
+      <button class="setcard new" data-act="open-sheet" data-sheet="new-set">${ic('plus')} New set</button>
+      ${few ? `<button class="setcard new" data-act="open-sheet" data-sheet="import">${ic('upload')} Import your Google Maps lists</button>` : ''}
+    </div>`;
+}
+
+function setDetail(set) {
+  const ids = setPlaceIds(set);
+  const phone = isPhone();
+  const head = `<div class="shead">
+    ${phone ? `<button class="iconbtn" data-act="open-set" data-id="" aria-label="All sets">${ic('back')}</button>` : ''}
+    <div class="grow"><div class="eyebrow">${set.builtIn ? 'Everything you\'ve added' : 'Set'} · ${plural(ids.length, 'place')}</div><h1>${esc(set.name)}</h1></div>
+    ${set.builtIn ? '' : `<button class="iconbtn" data-act="open-sheet" data-sheet="set-actions" data-set="${set.id}" aria-label="Set options">${ic('more')}</button>`}
+  </div>`;
+  const actions = `<div class="row" style="flex-wrap:wrap">
+    <button class="btn primary" data-act="start-set" data-id="${set.id}" ${ids.length < 2 ? 'disabled' : ''}>${ic('pick')}Start picking</button>
+    <button class="btn outline" data-act="open-sheet" data-sheet="${set.builtIn ? 'add-place' : 'add-to-set'}" data-set="${set.id}">${ic('plus')}Add places</button>
+  </div>`;
+  if (!ids.length) {
+    return `<div class="detail">${head}<div class="panel empty"><span class="blob">+</span><b>Nothing in ${esc(set.name)} yet</b>
+      <span class="muted">Pick from places you've already added, or paste a new Google Maps link.</span>
+      <div class="row" style="flex-wrap:wrap;justify-content:center">
+        <button class="btn primary" data-act="open-sheet" data-sheet="${set.builtIn ? 'add-place' : 'add-to-set'}" data-set="${set.id}">Choose places</button>
+        <button class="btn outline" data-act="open-sheet" data-sheet="add-place" data-set="${set.id}">Paste a link</button>
+      </div></div></div>`;
+  }
+  return `<div class="detail">${head}${actions}
+    <div class="panel list">${ids.map((id) => {
+      const p = place(id);
+      const chips = setsWith(id).filter((s) => s !== set);
+      return `<div class="li placeli">${tile(p)}
+        <span class="t grow"><b>${esc(p.name)}</b><small>${p.pending ? '<span class="pending">Finding suburb…</span>' : esc(p.suburb)}</small>
+          ${p.note ? `<i>“${esc(p.note)}”</i>` : ''}
+          ${chips.length ? `<span class="schips">${chips.map((s) => `<span class="schip">${esc(s.name)}</span>`).join('')}</span>` : ''}</span>
+        <button class="iconbtn" data-act="open-sheet" data-sheet="place-actions" data-id="${id}" data-set="${set.id}" aria-label="More for ${esc(p.name)}">${ic('more')}</button>
+      </div>`;
+    }).join('')}</div></div>`;
+}
+
+function youScreen() {
+  const me = ui.me;
+  return `<div class="page settings">
+    <div class="profile"><span class="big" style="background:${me.color}">${esc(me.name[0])}</span><div><h1 class="h-sec">${esc(me.name)}</h1><span class="muted">Signed in on this device</span></div></div>
+    <div class="group"><span class="eyebrow">Getting there</span>
+      <div class="panel list"><button class="srow" data-act="open-sheet" data-sheet="home"><span class="ico">${ic('home')}</span><span class="grow">Home address</span><span class="val">${me.home ? esc(me.home) : 'Not set'}</span>${ic('right')}</button></div>
+      <span class="hint muted" style="font-size:12px;padding:0 6px">Used for public transport times on each card. Only you see them.</span>
+    </div>
+    <div class="group"><span class="eyebrow">Security</span>
+      <div class="panel list"><button class="srow" data-act="open-sheet" data-sheet="pin"><span class="ico">${ic('lock')}</span><span class="grow">Change PIN</span>${ic('right')}</button></div>
+    </div>
+    <div class="panel list"><button class="srow danger" data-act="signout">Sign out on this device</button></div>
+  </div>`;
+}
+
+/* ---------- Sheets ---------- */
+const val = (id, fallback = '') => esc(ui.sheet?.values?.[id] ?? fallback);
+
+function setChecklist(checked, { withAll = true } = {}) {
+  return `<div class="opts">
+    ${withAll ? `<div class="opt check" aria-checked="true" aria-disabled="true">${setTile(setOf('all'), 0)}<span class="grow"><b>All places</b><br><small class="muted">Always included</small></span><span class="tick">${ic('check')}</span></div>` : ''}
+    ${namedSets().map((s) => `<button type="button" class="opt check" role="checkbox" aria-checked="${checked.has(s.id)}" data-act="toggle-sheet-set" data-id="${s.id}">
+      ${setTile(s, db.sets.indexOf(s) - 1)}<span class="grow"><b>${esc(s.name)}</b><br><small class="muted">${plural(s.placeIds.length, 'place')}</small></span><span class="tick">${ic('check')}</span></button>`).join('')}
+    <div class="newset-inline"><input id="f-newset" type="text" maxlength="60" placeholder="New set, e.g. Birthday dinner" value="${val('f-newset')}"><button type="button" class="smallbtn" data-act="inline-new-set">${ic('plus')}Create</button></div>
+  </div>`;
+}
+
+function sheetView() {
+  const sh = ui.sheet;
+  if (!sh) return '';
+  const head = (title) => `<div class="head"><h2 id="sheet-title">${title}</h2><button class="iconbtn" data-act="close-sheet" aria-label="Close">${ic('x')}</button></div>`;
+  let body = '';
+  if (sh.type === 'choose-set') {
+    body = head('Pick from') + `<div class="opts" role="radiogroup">${db.sets.map((s, i) => `
+      <button class="opt" role="radio" aria-checked="${String(s.id) === String(ui.startSetId)}" data-act="choose-set" data-id="${s.id}" ${setPlaceIds(s).length < 2 ? 'disabled style="opacity:.5"' : ''}>
+        ${setTile(s, i - 1)}<span class="grow"><b>${esc(s.name)}</b><br><small class="muted">${setPlaceIds(s).length < 2 ? 'Add at least 2 places to pick from this' : plural(setPlaceIds(s).length, 'place')}</small></span><span class="tick">${ic('check')}</span>
+      </button>`).join('')}</div>`;
+  } else if (sh.type === 'share') {
+    const s = session();
+    const link = `https://so-where.home.lan/s/${s.id}?invite=•••`;
+    body = head('Invite your group') + `
+      <p class="muted" style="margin:0">Anyone with this link can join and pick on their own phone. Share it only with your group.</p>
+      <div class="field"><label for="f-link">Session link</label><div class="box"><input id="f-link" type="text" readonly value="${link}"><button class="smallbtn" data-act="copy">${ic('copy')} ${sh.copied ? 'Copied' : 'Copy'}</button></div></div>
+      <span class="eyebrow">Here now</span>
+      <div class="panel list">${s.members.map((m) => `<div class="li">${avatar(person(m))}<span class="t grow"><b>${esc(person(m).name)}${m === ui.me.id ? ' (you)' : ''}</b></span><small class="muted">${plural(s.picks[m], 'pick')}</small></div>`).join('')}</div>`;
+  } else if (sh.type === 'add-place') {
+    body = head(sh.setId && sh.setId !== 'all' ? `Add to ${esc(setOf(sh.setId).name)}` : 'Add a place') + `<form data-form="add-place" style="display:flex;flex-direction:column;gap:14px">
+      <div class="field"><label for="f-url">Google Maps link</label>
+        <div class="box"><input id="f-url" type="text" inputmode="url" placeholder="https://maps.app.goo.gl/…" value="${val('f-url')}" autocomplete="off"><button type="button" class="smallbtn" data-act="paste-example">Paste</button></div>
+        ${sh.error ? `<span class="err">${esc(sh.error)}</span>` : '<span class="hint">In Google Maps, open the place, tap Share and copy the link.</span>'}</div>
+      <div class="field"><label for="f-note">Note <span class="muted" style="font-weight:500">(optional)</span></label><div class="box"><input id="f-note" type="text" placeholder="Get the dumplings" value="${val('f-note')}"></div></div>
+      <div class="field"><span class="lbl-like">Sets</span>${setChecklist(sh.sets)}</div>
+      <button class="btn primary block">Add place</button></form>
+      ${sh.setId && sh.setId !== 'all' ? `<button class="btn ghost" data-act="open-sheet" data-sheet="add-to-set" data-set="${sh.setId}">Choose from places you've added</button>` : ''}`;
+  } else if (sh.type === 'import') {
+    body = head('Import from Google Maps') + (sh.report
+      ? `<div class="note-box" style="background:#e9f6ef;box-shadow:0 0 0 1px #bfe3cf">${ic('check')}<span>${esc(sh.report)}</span></div><button class="btn primary block" data-act="close-sheet">See your sets</button>`
+      : `<p class="muted" style="margin:0">From <b>takeout.google.com</b>, export <b>Saved</b> (one CSV per list) and <b>Maps (your places)</b>. Each saved list becomes a set here; importing again only adds what's new.</p>
+        <label class="panel" style="padding:22px;text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center;cursor:pointer;border:2px dashed #e2cfc4;box-shadow:none;background:transparent">
+          ${ic('upload')}<b>Choose .csv or .json files</b><span class="muted" style="font-size:13px">e.g. Date night.csv, Saved Places.json</span>
+          <input type="file" multiple accept=".csv,.json" data-act="import-files" style="position:absolute;opacity:0;width:1px;height:1px"></label>`);
+  } else if (sh.type === 'place-actions') {
+    const p = place(sh.id);
+    const inSet = sh.setId && sh.setId !== 'all' ? setOf(sh.setId) : null;
+    body = head(esc(p.name)) + (sh.editing
+      ? `<form data-form="edit-note" style="display:flex;flex-direction:column;gap:14px"><div class="field"><label for="f-edit">Note</label><div class="box"><input id="f-edit" type="text" value="${val('f-edit', p.note)}"></div></div><button class="btn primary block">Save note</button></form>`
+      : sh.confirm
+        ? `<p style="margin:0">Delete <b>${esc(p.name)}</b> for everyone? It's removed from every set too.</p><button class="btn primary block" style="background:var(--stamp)" data-act="delete-place" data-id="${p.id}">Delete place</button><button class="btn ghost" data-act="close-sheet">Keep it</button>`
+        : `<div class="actsheet">
+            <button data-act="open-sheet" data-sheet="place-sets" data-id="${p.id}">${ic('sets')}Sets<span class="grow"></span><small class="muted">${esc(setsWith(p.id).map((s) => s.name).join(', ') || 'None yet')}</small></button>
+            <button data-act="edit-note">${ic('edit')}Edit note</button>
+            <a href="${mapsUrl(p)}" target="_blank" rel="noreferrer">${ic('ext')}Open in Google Maps</a>
+            ${inSet ? `<button data-act="remove-from-set" data-id="${p.id}" data-set="${inSet.id}">${ic('x')}Remove from ${esc(inSet.name)}</button>` : ''}
+            <button class="danger" data-act="confirm-delete">${ic('trash')}Delete place</button></div>`);
+  } else if (sh.type === 'place-sets') {
+    const p = place(sh.id);
+    body = head(`Sets for ${esc(p.name)}`) + setChecklist(sh.sets) + '<button class="btn primary block" data-act="close-sheet">Done</button>';
+  } else if (sh.type === 'new-set' || sh.type === 'rename-set') {
+    const renaming = sh.type === 'rename-set';
+    body = head(renaming ? 'Rename set' : 'New set') + `<form data-form="${sh.type}" style="display:flex;flex-direction:column;gap:14px">
+      <div class="field"><label for="f-set">Set name</label><div class="box"><input id="f-set" type="text" maxlength="60" placeholder="Date night" value="${val('f-set', renaming ? setOf(sh.setId).name : '')}" required></div>
+      ${renaming ? '' : '<span class="hint">Next you\'ll pick which places go in it.</span>'}</div>
+      <button class="btn primary block">${renaming ? 'Save' : 'Create set'}</button></form>`;
+  } else if (sh.type === 'set-actions') {
+    const set = setOf(sh.setId);
+    body = head(esc(set.name)) + (sh.confirm
+      ? `<p style="margin:0">Delete the set <b>${esc(set.name)}</b>? Its places stay in All places.</p><button class="btn primary block" style="background:var(--stamp)" data-act="delete-set" data-set="${set.id}">Delete set</button><button class="btn ghost" data-act="close-sheet">Keep it</button>`
+      : `<div class="actsheet"><button data-act="open-sheet" data-sheet="rename-set" data-set="${set.id}">${ic('edit')}Rename</button><button class="danger" data-act="confirm-delete">${ic('trash')}Delete set</button></div>`);
+  } else if (sh.type === 'add-to-set') {
+    const set = setOf(sh.setId);
+    body = head(`Add to ${esc(set.name)}`) + `
+      <div class="field"><div class="box"><input id="f-search" type="text" placeholder="Search your places" autocomplete="off" data-filter=".opt[data-name]"></div></div>
+      <div class="opts">${db.places.map((p) => `
+        <button class="opt check" role="checkbox" data-name="${esc((p.name + ' ' + p.suburb).toLowerCase())}" aria-checked="${set.placeIds.includes(p.id)}" data-act="toggle-in-set" data-id="${p.id}">${tile(p)}<span class="grow"><b>${esc(p.name)}</b><br><small class="muted">${esc(p.suburb)}</small></span><span class="tick">${ic('check')}</span></button>`).join('')}</div>
+      <button class="btn ghost" data-act="open-sheet" data-sheet="add-place" data-set="${set.id}">${ic('plus')}Not here? Paste a Google Maps link</button>
+      <button class="btn primary block" data-act="close-sheet">Done · ${plural(set.placeIds.length, 'place')}</button>`;
+  } else if (sh.type === 'home') {
+    body = head('Home address') + `<form data-form="home" style="display:flex;flex-direction:column;gap:14px">
+      <div class="field"><label for="f-home">Address</label><div class="box"><input id="f-home" type="text" autocomplete="street-address" value="${val('f-home', ui.me.home)}" required></div>
+      <span class="hint">Used to show how long public transport takes from your place, leaving now. Only you see your travel times.</span></div>
+      <button class="btn primary block">Save address</button></form>`;
+  } else if (sh.type === 'pin') {
+    body = head('New PIN') + `${pinField()}
+      <div class="note-box">${ic('lock')}<span>A light lock, not real security. Don't reuse a bank or phone PIN.</span></div>`;
+  }
+  return `<div class="scrim" data-act="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">${body}</div></div>`;
+}
+
+/* ---------- Shell + render ---------- */
+const NAV = [['home', 'pick', 'Pick'], ['places', 'places', 'Places'], ['you', 'you', 'You']];
+const navOn = (r) => (r === 'session' ? 'home' : r);
+
+function screen() {
+  return { home: homeScreen, session: sessionScreen, places: placesScreen, you: youScreen }[ui.route]();
+}
+
+function render() {
+  const app = document.getElementById('app');
+  const phone = isPhone();
+  app.className = `${phone ? 'm-phone' : 'm-desk'}${ui.view === 'phone' ? ' framed' : ''}${ui.me ? '' : ' no-tabs'}`;
+  if (ui.sheet) for (const input of app.querySelectorAll('.sheet input[id]:not([type=file])')) (ui.sheet.values ??= {})[input.id] = input.value;
+  const scrollEl = app.querySelector('.scroll');
+  const keep = scrollEl ? scrollEl.scrollTop : 0;
+  const toast = ui.toast ? `<div class="toast" role="status"><span>${esc(ui.toast.text)}</span>${ui.toast.undo ? '<button data-act="undo">Undo</button>' : ''}</div>` : '';
+  if (!ui.me) {
+    app.innerHTML = signInScreen() + toast;
+    const pin = document.getElementById('f-pin');
+    if (pin) { showPinDigits(pin); pin.focus(); }
+    return;
+  }
+  const on = navOn(ui.route);
+  const top = phone ? '' : `<header class="dnav"><span class="brand">So Where?</span><nav>${NAV.map(([r, i, l]) => `<button class="navbtn${on === r ? ' on' : ''}" data-act="go" data-to="${r}">${ic(i)}${l}</button>`).join('')}</nav><span class="me">${avatar(ui.me)}${esc(ui.me.name)}</span></header>`;
+  const tabs = phone ? `<nav class="tabs">${NAV.map(([r, i, l]) => `<button class="tab${on === r ? ' on' : ''}" data-act="go" data-to="${r}"><span class="pill">${ic(i)}</span>${l}</button>`).join('')}</nav>` : '';
+  app.innerHTML = `${top}<div class="scroll">${screen()}</div>${tabs}${sheetView()}${toast}`;
+  app.querySelector('.scroll').scrollTop = keep;
+  ui.enter = false;
+  const first = app.querySelector('.sheet input:not([readonly]):not(#f-newset), .sheet button:not([data-act="close-sheet"])');
+  if (ui.sheet && !ui.sheet.focused && first) { first.focus(); ui.sheet.focused = true; }
+  const pin = app.querySelector('#f-pin');
+  if (pin) showPinDigits(pin);
+}
+
+function renderAnimated() {
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(render);
+  else render();
+}
+
+let toastTimer;
+function showToast(text, undo) {
+  ui.toast = { text, undo };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { ui.toast = null; render(); }, 5000);
+}
+
+function go(route, extra = {}) {
+  Object.assign(ui, { route, sheet: null, ...extra });
+  document.getElementById('app').querySelector('.scroll')?.scrollTo(0, 0);
+  render();
+  document.getElementById('app').querySelector('.scroll')?.scrollTo(0, 0);
+}
+
+/* ---------- Actions ---------- */
+function pinEntered() {
+  if (ui.sheet?.type === 'pin') { ui.sheet = null; showToast('PIN changed'); render(); return; }
+  const st = ui.signin;
+  if (st.step === 'pin') ui.me = person(st.who);
+  else {
+    const p = { id: ++db.nextId, name: st.name, color: '#6a3d6e', home: '' };
+    db.people.push(p);
+    ui.me = p;
+  }
+  ui.signin = { step: 'who', who: null, pin: '', name: '' };
+  go('home');
+}
+
+function pick(winnerId) {
+  const s = session();
+  if (!ui.pair || ui.chosen != null) return;
+  const [a, b] = ui.pair;
+  recordPick(s, ui.me.id, a, b, winnerId);
+  ui.chosen = winnerId ?? -1;
+  render();
+  const n = s.picks[ui.me.id];
+  setTimeout(() => {
+    ui.chosen = null;
+    ui.pair = nextPair(s);
+    ui.enter = true;
+    if (n === 10 || n === 25) showToast(n === 10 ? '10 picks! Your top 3 is taking shape.' : '25 picks. You really care about dinner.');
+    trackMoves(s);
+    render();
+  }, winnerId == null ? 120 : 280);
+}
+
+function trackMoves(s) {
+  const order = combined(s).map((r) => r.id);
+  ui.moved = new Set(order.filter((id, i) => s.lastOrder.length && s.lastOrder.indexOf(id) > i));
+  s.lastOrder = order;
+}
+
+function veto(id) {
+  const s = session();
+  s.vetoes[id] = ui.me.id;
+  ui.pair = nextPair(s);
+  ui.enter = true;
+  showToast(`${place(id).name} is out for tonight`, { placeId: id });
+  render();
+}
+
+const ACTIONS = {
+  'choose-person': (el) => { ui.signin = { step: 'pin', who: +el.dataset.id, pin: '' }; render(); },
+  'new-person': () => { ui.signin = { step: 'new-name', name: '', pin: '' }; render(); },
+  'signin-back': () => { ui.signin = { step: 'who', who: null, pin: '', name: '' }; render(); },
+  go: (el) => go(el.dataset.to),
+  'open-sheet': (el) => {
+    const setId = el.dataset.set ? (el.dataset.set === 'all' ? 'all' : +el.dataset.set) : ui.sheet?.setId;
+    const id = el.dataset.id ? +el.dataset.id : undefined;
+    const sets = new Set(el.dataset.sheet === 'place-sets' ? setsWith(id).map((s) => s.id) : setId && setId !== 'all' ? [setId] : []);
+    ui.sheet = { type: el.dataset.sheet, id, setId, sets, pin: '' };
+    render();
+  },
+  'toggle-sheet-set': (el) => {
+    const id = +el.dataset.id;
+    const sets = ui.sheet.sets;
+    sets.has(id) ? sets.delete(id) : sets.add(id);
+    if (ui.sheet.type === 'place-sets') { const set = setOf(id); set.placeIds = sets.has(id) ? [...set.placeIds, ui.sheet.id] : set.placeIds.filter((x) => x !== ui.sheet.id); }
+    render();
+  },
+  'inline-new-set': () => {
+    const input = document.getElementById('f-newset');
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    const set = { id: ++db.nextId, name, placeIds: ui.sheet.type === 'place-sets' ? [ui.sheet.id] : [] };
+    db.sets.push(set);
+    ui.sheet.sets.add(set.id);
+    input.value = '';
+    render();
+  },
+  'start-set': (el) => { ui.startSetId = el.dataset.id === 'all' ? 'all' : +el.dataset.id; ACTIONS.start(); },
+  'close-sheet': () => { ui.sheet = null; render(); },
+  scrim: (el, e) => { if (e.target === el) ACTIONS['close-sheet'](); },
+  'choose-set': (el) => { ui.startSetId = el.dataset.id === 'all' ? 'all' : +el.dataset.id; ui.sheet = null; render(); },
+  start: () => {
+    const s = newSession(`s-${++db.nextId}`, ui.startSetId, [ui.me.id], Date.now(), db.places);
+    db.sessions.push(s);
+    go('session', { sessionId: s.id, sessionTab: 'pick', boardTab: 'together', pair: null, enter: true });
+    // Pretend a friend opens the link a few seconds later.
+    const friend = db.people.find((p) => p.id !== ui.me.id);
+    setTimeout(() => {
+      if (!friend || s.members.includes(friend.id)) return;
+      s.members.push(friend.id);
+      s.picks[friend.id] = 0;
+      s.ratings[friend.id] = Object.fromEntries(db.places.map((p) => [p.id, 1000]));
+      if (ui.sessionId === s.id) { showToast(`${friend.name} joined`); render(); }
+    }, 6000);
+  },
+  'open-session': (el) => go('session', { sessionId: el.dataset.id, sessionTab: 'pick', boardTab: 'together', pair: null, enter: true }),
+  'session-tab': (el) => { ui.sessionTab = el.dataset.tab; ui.enter = true; render(); },
+  'board-tab': (el) => { ui.boardTab = el.dataset.tab === 'together' ? 'together' : +el.dataset.tab; renderAnimated(); },
+  pick: (el) => pick(+el.dataset.id),
+  tie: () => pick(null),
+  veto: (el) => veto(+el.dataset.id),
+  undo: () => {
+    const s = session();
+    if (s && ui.toast?.undo) delete s.vetoes[ui.toast.undo.placeId];
+    ui.toast = null;
+    render();
+  },
+  copy: () => {
+    const input = document.getElementById('f-link');
+    const done = () => { ui.sheet.copied = true; showToast('Link copied'); render(); };
+    try { navigator.clipboard.writeText(input.value).then(done, () => { input.select(); }); } catch { input.select(); }
+  },
+  'paste-example': () => { document.getElementById('f-url').value = 'https://www.google.com/maps/place/Pretend+Noodle+Lab/@-37.80,144.97'; },
+  'edit-note': () => { ui.sheet.editing = true; ui.sheet.focused = false; render(); },
+  'confirm-delete': () => { ui.sheet.confirm = true; render(); },
+  'delete-place': (el) => {
+    const id = +el.dataset.id;
+    db.places = db.places.filter((p) => p.id !== id);
+    for (const s of db.sets) if (!s.builtIn) s.placeIds = s.placeIds.filter((x) => x !== id);
+    ui.sheet = null;
+    showToast('Place deleted');
+    render();
+  },
+  'open-set': (el) => go('places', { setId: el.dataset.id === '' ? null : el.dataset.id === 'all' ? 'all' : +el.dataset.id }),
+  'remove-from-set': (el) => { const set = setOf(+el.dataset.set); set.placeIds = set.placeIds.filter((x) => x !== +el.dataset.id); ui.sheet = null; showToast(`Removed from ${set.name}`); render(); },
+  'toggle-in-set': (el) => {
+    const set = setOf(ui.sheet.setId);
+    const id = +el.dataset.id;
+    set.placeIds = set.placeIds.includes(id) ? set.placeIds.filter((x) => x !== id) : [...set.placeIds, id];
+    render();
+  },
+  'delete-set': (el) => { const id = +el.dataset.set; db.sets = db.sets.filter((s) => s.id !== id); if (String(ui.startSetId) === String(id)) ui.startSetId = 'all'; showToast('Set deleted'); go('places', { setId: isPhone() ? null : 'all' }); },
+  signout: () => { ui.me = null; ui.sheet = null; ui.route = 'home'; render(); },
+};
+
+const FORMS = {
+  'new-name': () => {
+    const name = document.getElementById('f-name').value.trim();
+    if (!name) return;
+    ui.signin = { step: 'new-pin', name, pin: '' };
+    render();
+  },
+  'add-place': () => {
+    const url = document.getElementById('f-url').value.trim();
+    const note = document.getElementById('f-note').value.trim();
+    const isMaps = /^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)/i.test(url);
+    if (!isMaps) { ui.sheet = { ...ui.sheet, url, error: "That doesn't look like a Google Maps link. In Google Maps, tap Share and copy the link.", focused: true }; render(); return; }
+    const named = url.match(/\/place\/([^/@]+)/);
+    const name = named ? decodeURIComponent(named[1].replace(/\+/g, ' ')) : 'Shared place';
+    const p = { id: ++db.nextId, name, suburb: '', note, mins: 15 + Math.floor(Math.random() * 25), sw: db.places.length % SWATCH.length, pending: true };
+    if (document.activeElement?.id === 'f-newset') { ACTIONS['inline-new-set'](); return; }
+    db.places.unshift(p);
+    for (const id of ui.sheet.sets) setOf(id).placeIds.push(p.id);
+    ui.sheet = null;
+    showToast(`Added ${name}`);
+    render();
+    setTimeout(() => { p.pending = false; p.suburb = SUBURBS[p.id % SUBURBS.length]; render(); }, 2200);
+  },
+  'edit-note': () => { place(ui.sheet.id).note = document.getElementById('f-edit').value.trim(); ui.sheet = null; showToast('Note saved'); render(); },
+  'new-set': () => {
+    const name = document.getElementById('f-set').value.trim();
+    if (!name) return;
+    const set = { id: ++db.nextId, name, placeIds: [] };
+    db.sets.push(set);
+    go('places', { setId: set.id });
+    ui.sheet = { type: 'add-to-set', setId: set.id, sets: new Set() };
+    render();
+  },
+  'rename-set': () => { const set = setOf(ui.sheet.setId); set.name = document.getElementById('f-set').value.trim() || set.name; ui.sheet = null; render(); },
+  home: () => { ui.me.home = document.getElementById('f-home').value.trim(); ui.sheet = null; showToast('Home saved'); render(); },
+};
+
+/* ---------- Wiring ---------- */
+const app = document.getElementById('app');
+app.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el || el.dataset.act === 'import-files') return;
+  const act = ACTIONS[el.dataset.act];
+  if (act) act(el, e);
+});
+app.addEventListener('submit', (e) => {
+  e.preventDefault();
+  FORMS[e.target.dataset.form]?.();
+});
+app.addEventListener('change', (e) => {
+  if (e.target.dataset.act !== 'import-files' || !e.target.files.length) return;
+  const lists = [...e.target.files].map((f) => f.name.replace(/\.(csv|json)$/i, '')).filter((n) => n !== 'Saved Places');
+  // Each saved list becomes a set; pretend it holds a few existing places.
+  const made = lists.map((name) => {
+    const set = { id: ++db.nextId, name, placeIds: db.places.slice(0, 3 + (name.length % 3)).map((p) => p.id) };
+    db.sets.push(set);
+    return set;
+  });
+  ui.sheet.report = `Added ${e.target.files.length + 2} places, 1 was already there.${made.length ? ` New ${made.length === 1 ? 'set' : 'sets'}: ${lists.join(', ')}.` : ''} Suburbs fill in over the next few minutes.`;
+  if (made.length) ui.setId = isPhone() ? null : made[0].id;
+  if (ui.route !== 'places') ui.route = 'places';
+  render();
+});
+app.addEventListener('input', (e) => {
+  if (e.target.id === 'f-pin') {
+    showPinDigits(e.target);
+    if (e.target.value.length === 4) setTimeout(pinEntered, 150);
+    return;
+  }
+  const selector = e.target.dataset.filter;
+  if (!selector) return;
+  const q = e.target.value.trim().toLowerCase();
+  for (const row of app.querySelectorAll(selector)) row.hidden = !row.dataset.name.includes(q);
+});
+addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && ui.sheet) { ACTIONS['close-sheet'](); return; }
+  if (ui.route !== 'session' || ui.sheet || isPhone() || !ui.pair) return;
+  if (e.key === 'ArrowLeft') pick(ui.pair[0]);
+  if (e.key === 'ArrowRight') pick(ui.pair[1]);
+  if (e.key === 'ArrowDown') { e.preventDefault(); pick(null); }
+});
+addEventListener('resize', () => { if (ui.view === 'auto') render(); });
+
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
+  ui.view = b.dataset.view;
+  document.querySelectorAll('[data-view]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  render();
+}));
+document.querySelector('[data-reset]').addEventListener('click', () => {
+  db = seed();
+  Object.assign(ui, { me: null, route: 'home', sheet: null, toast: null, pair: null, signin: { step: 'who', who: null, pin: '', name: '' }, startSetId: 2 });
+  render();
+});
+
+// Friends keep picking in the background, so the leaderboard is live.
+setInterval(() => {
+  const s = ui.me && ui.route === 'session' ? session() : null;
+  if (!s) return;
+  const others = s.members.filter((m) => m !== ui.me.id);
+  if (!others.length) return;
+  simulatePick(s, others[Math.floor(Math.random() * others.length)]);
+  trackMoves(s);
+  const boardVisible = !isPhone() || ui.sessionTab === 'board';
+  if (!ui.sheet && boardVisible && ui.chosen == null) renderAnimated();
+}, 2500);
+
+db = seed();
+render();
+</script>
