@@ -8,12 +8,23 @@ const PIN_WARNING = /light lock.*not real security.*bank or phone PIN/is;
 
 export async function signUp(page: Page, name: string, pin = '1234', path = '/') {
   await page.goto(`${path}${path.includes('?') ? '&' : '?'}invite=${INVITE}`);
+  await signUpHere(page, name, pin);
+}
+
+/** Signs up a new person from the sign-in screen that's already showing. */
+export async function signUpHere(page: Page, name: string, pin = '1234') {
   await page.getByRole('button', { name: /i'm new/i }).click();
-  await expect(page.getByText(PIN_WARNING)).toBeVisible();
   await page.getByLabel('Your name').fill(name);
-  await page.getByLabel('Choose a 4-digit PIN').fill(pin);
-  await page.getByRole('button', { name: /^start$/i }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText(PIN_WARNING)).toBeVisible();
+  await page.getByLabel('4-digit PIN').fill(pin); // the 4th digit submits
   await expectSignedIn(page);
+}
+
+/** Signs in an existing person from the sign-in screen that's already showing. */
+export async function signInHere(page: Page, name: string, pin: string) {
+  await page.getByRole('button', { name, exact: true }).click();
+  await page.getByLabel('4-digit PIN').fill(pin);
 }
 
 /** The signed-in app is showing: its nav (the top nav or the bottom tabs, whichever fits the screen) is there. */

@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Lock, X } from 'lucide-react';
 import {
   useEffect,
   useId,
@@ -138,18 +138,87 @@ export function Notice({ tone, children }: { tone: 'error' | 'ok' | 'info'; chil
 
 export function PinWarning() {
   return (
-    <Notice tone="info">
-      🔓 Your PIN is a light lock to keep friends out of each other's rankings — it's not real security. Don't reuse a bank or phone PIN.
-    </Notice>
+    <p className="flex gap-2 rounded-[14px] bg-white px-3 py-2.5 text-[13px] text-[#6d5249] ring-1 ring-edge">
+      <Lock size={18} className="flex-none" aria-hidden="true" />
+      <span>Your PIN is a light lock to keep friends out of each other's rankings — it's not real security. Don't reuse a bank or phone PIN.</span>
+    </p>
+  );
+}
+
+/**
+ * One real numeric input, drawn as four cells. The 4th digit calls `onComplete`;
+ * if that fails, its error shows, the input clears and it's ready for another go.
+ */
+export function PinInput({ onComplete }: { onComplete: (pin: string) => Promise<void> }) {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+
+  const change = async (typed: string) => {
+    const digits = typed.replace(/\D/g, '').slice(0, 4);
+    setPin(digits);
+    if (digits.length < 4) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onComplete(digits);
+    } catch (err) {
+      setError(errorMessage(err));
+      setPin('');
+      input.current?.focus();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <label className="group relative flex cursor-text justify-center">
+        <input
+          ref={input}
+          aria-label="4-digit PIN"
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={4}
+          autoComplete="off"
+          autoFocus
+          readOnly={busy}
+          value={pin}
+          onChange={(e) => void change(e.target.value)}
+          className="absolute inset-0 w-full text-base caret-transparent opacity-0"
+        />
+        <span className="flex gap-3" aria-hidden="true">
+          {[0, 1, 2, 3].map((i) => (
+            <i
+              key={i}
+              className={`grid h-[66px] w-[58px] place-items-center rounded-[18px] bg-white ring-[1.5px] ring-edge ${i === Math.min(pin.length, 3) ? 'group-focus-within:ring-[2.5px] group-focus-within:ring-tomato' : ''}`}
+            >
+              {i < pin.length && <span className="size-3.5 rounded-full bg-ink" />}
+            </i>
+          ))}
+        </span>
+      </label>
+      {error && (
+        <p role="alert" className="text-[13px] font-semibold text-stamp">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
 export const Eyebrow = ({ children }: { children: ReactNode }) => <span className="text-[11px] font-bold tracking-[.07em] text-muted uppercase">{children}</span>;
 
 /** A person's coloured initial. */
-export function Avatar({ person, size = 'sm' }: { person: { id: number; name: string }; size?: 'sm' | 'lg' }) {
+export function Avatar({ person, size = 'sm' }: { person: { id: number; name: string }; size?: 'sm' | 'lg' | 'xl' }) {
   const { bg, fg } = swatch(person.id);
-  const sizes = { sm: 'size-7 rounded-full text-xs font-bold ring-2 ring-peach', lg: 'size-16 rounded-[22px] font-display text-[28px]' };
+  const sizes = {
+    sm: 'size-7 rounded-full text-xs font-bold ring-2 ring-peach',
+    lg: 'size-16 rounded-[22px] font-display text-[28px]',
+    xl: 'size-[76px] rounded-[28px] font-display text-4xl transition-transform',
+  };
   return (
     <span title={person.name} aria-hidden="true" style={{ background: bg, color: fg }} className={`inline-grid flex-none place-items-center ${sizes[size]}`}>
       {person.name[0]?.toUpperCase()}

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { INVITE, PIN_WARNING, signedInAs, signUp, uniqueName } from './helpers.ts';
+import { INVITE, PIN_WARNING, signedInAs, signInHere, signUp, uniqueName } from './helpers.ts';
 
 test('#3 AC1: without the invite code the app shows no access', async ({ page }) => {
   await page.goto('/');
@@ -21,12 +21,9 @@ test('#3 AC3: another device signs in by choosing the name and entering the PIN'
 
   const laptop = await (await browser.newContext()).newPage();
   await laptop.goto(`/?invite=${INVITE}`);
-  await laptop.getByRole('button', { name }).click();
-  await laptop.getByLabel('PIN').fill('1111');
-  await laptop.getByRole('button', { name: /sign in/i }).click();
+  await signInHere(laptop, name, '1111');
   await expect(laptop.getByText(/wrong pin/i)).toBeVisible();
-  await laptop.getByLabel('PIN').fill('2468');
-  await laptop.getByRole('button', { name: /sign in/i }).click();
+  await laptop.getByLabel('4-digit PIN').fill('2468');
   await signedInAs(laptop, name);
 });
 

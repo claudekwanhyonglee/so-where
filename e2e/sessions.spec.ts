@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { signUp, uniqueName } from './helpers.ts';
+import { signUp, signUpHere, uniqueName } from './helpers.ts';
 
 async function addPlace(page: Page, name: string, note = '') {
   const hex = Math.floor(Math.random() * 1e12).toString(16);
@@ -42,10 +42,7 @@ test('#8 AC1: a friend opens the share link and joins', async ({ page, browser }
   const friend = await (await browser.newContext()).newPage();
   const name = uniqueName('Friend');
   await friend.goto(link);
-  await friend.getByRole('button', { name: /i'm new/i }).click();
-  await friend.getByLabel('Your name').fill(name);
-  await friend.getByLabel('Choose a 4-digit PIN').fill('1234');
-  await friend.getByRole('button', { name: /^start$/i }).click();
+  await signUpHere(friend, name);
   await expect(cards(friend)).toHaveCount(2);
   await expect(page.getByRole('list', { name: "Who's here" }).getByText(name)).toBeVisible({ timeout: 10_000 });
 });
