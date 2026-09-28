@@ -3,6 +3,7 @@ import { Hono, type Context } from 'hono';
 import type { Deps } from './app.ts';
 import type { AppEnv } from './auth.ts';
 import type { Db } from './db.ts';
+import { leaderboard } from './leaderboard.ts';
 import { getPlace } from './places.ts';
 import { choosePair, DEFAULT_RATING, estimateSession, isUpset, updateHistory, type Candidate, type LastPick, type Pick, type Rating } from './ranking.ts';
 import { ALL_PLACES, parseSetId, setExists, setName, setPlaceIds, type SetId } from './sets.ts';
@@ -173,6 +174,11 @@ export function sessionsRoutes({ db, config, now }: Deps) {
   api.get('/:id/pair', (c) => {
     const session = withSession(c);
     return session ? c.json(nextPair(db, session, c.var.person.id)) : notFound(c);
+  });
+
+  api.get('/:id/leaderboard', (c) => {
+    const session = withSession(c);
+    return session ? c.json(leaderboard(db, session)) : notFound(c);
   });
 
   api.post('/:id/picks', async (c) => {

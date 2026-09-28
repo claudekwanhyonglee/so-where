@@ -47,7 +47,7 @@ test('#8 AC1: a friend opens the share link and joins', async ({ page, browser }
   await friend.getByLabel('Choose a 4-digit PIN').fill('1234');
   await friend.getByRole('button', { name: /^start$/i }).click();
   await expect(cards(friend)).toHaveCount(2);
-  await expect(page.getByText(name)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('list', { name: "Who's here" }).getByText(name)).toBeVisible({ timeout: 10_000 });
 });
 
 test('#8 AC2 + AC3 + AC4 + AC5: pick, tie and "Absolutely not"', async ({ page }) => {
@@ -62,12 +62,12 @@ test('#8 AC2 + AC3 + AC4 + AC5: pick, tie and "Absolutely not"', async ({ page }
     await expect(card.getByRole('link', { name: /open in google maps/i })).toHaveAttribute('href', /cid=/);
   }
 
-  await expect(page.getByText('0 picks')).toBeVisible();
+  await expect(page.getByText('0 picks', { exact: true })).toBeVisible();
   await cards(page).first().getByRole('button', { name: /^pick /i }).click();
   await expect(page.getByText('1 pick', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: /too close to call/i }).click();
-  await expect(page.getByText('2 picks')).toBeVisible();
+  await expect(page.getByText('2 picks', { exact: true })).toBeVisible();
 
   const vetoedName = (await cards(page).first().getByRole('heading').innerText()).trim();
   await cards(page).first().getByRole('button', { name: /absolutely not/i }).click();

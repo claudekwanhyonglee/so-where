@@ -1,35 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
+import { Leaderboard } from './Leaderboard.tsx';
 import { googleMapsUrl } from './model.ts';
 import { Button, Card, Notice } from './ui.tsx';
+import { usePolling } from './usePolling.ts';
 
 export type CardPlace = { id: number; name: string; suburb: string | null; note: string; key: string; lat: number | null; lng: number | null };
 type SessionInfo = { id: string; setName: string; members: { id: number; name: string }[]; sharePath: string };
 type PairResponse = { pair: CardPlace[] | null; picks: number };
 
-/** Calls `load` now and every `ms`, while the page is open. */
-export function usePolling<T>(load: () => Promise<T>, ms: number) {
-  const [data, setData] = useState<T | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const tick = () => load().then((d) => alive && setData(d), () => undefined);
-    tick();
-    const timer = setInterval(tick, ms);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [load, ms]);
-  return data;
-}
-
 export function SessionPage({ id }: { id: string }) {
   const info = usePolling(useCallback(() => api<SessionInfo>(`/sessions/${id}`), [id]), 3000);
+  const [version, setVersion] = useState(0);
   if (!info) return null;
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <SessionHeader info={info} />
-      <Picker sessionId={id} />
+      <Picker sessionId={id} onPicked={() => setVersion((v) => v + 1)} />
+      <Leaderboard sessionId={id} version={version} />
     </div>
   );
 }
@@ -63,15 +51,21 @@ function SessionHeader({ info }: { info: SessionInfo }) {
           <p className="text-xs text-stone-500">Anyone with this link can get in, so share it only with your group.</p>
         </Card>
       )}
-      <p className="text-sm text-stone-600">
-        <span className="font-semibold">Here: </span>
-        {info.members.map((m) => m.name).join(', ')}
-      </p>
+      <div className="flex flex-wrap items-center gap-1.5 text-sm">
+        <span className="font-semibold text-stone-600">Here:</span>
+        <ul aria-label="Who's here" className="flex flex-wrap gap-1.5">
+          {info.members.map((m) => (
+            <li key={m.id} className="rounded-full bg-white px-2.5 py-0.5 font-medium ring-1 ring-stone-200">
+              {m.name}
+            </li>
+          ))}
+        </ul>
+      </div>
     </header>
   );
 }
 
-function Picker({ sessionId }: { sessionId: string }) {
+function Picker({ sessionId, onPicked }: { sessionId: string; onPicked?: () => void }) {
   const [state, setState] = useState<PairResponse | null>(null);
   const [vetoed, setVetoed] = useState<CardPlace | null>(null);
   const [error, setError] = useState('');
@@ -79,7 +73,13 @@ function Picker({ sessionId }: { sessionId: string }) {
 
   const run = (request: Promise<PairResponse>) => {
     setError('');
-    request.then(setState, (err: Error) => setError(err.message));
+    request.then(
+      (next) => {
+        setState(next);
+        onPicked?.();
+      },
+      (err: Error) => setError(err.message),
+    );
   };
   useEffect(() => run(api<PairResponse>(`${base}/pair`)), [base]);
 
@@ -98,7 +98,7 @@ function Picker({ sessionId }: { sessionId: string }) {
   return (
     <section aria-label="Pick" className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between px-1">
-        <h2 className="text-lg font-bold">Which would you rather?</h2>
+        <h2 className="text-lg font-bold">Tap the one you'd rather</h2>
         <span className="text-sm text-stone-500">{picks === 1 ? '1 pick' : `${picks} picks`}</span>
       </div>
       {error && <Notice tone="error">{error}</Notice>}
