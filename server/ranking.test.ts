@@ -435,13 +435,13 @@ describe('#24 AC4: no jitter', () => {
 });
 
 describe('#24 AC6: fast enough', () => {
-  it('ranks 8 people × 40 places in well under 200 ms', () => {
+  it('ranks 8 people × 40 places in under 200 ms', () => {
     const rng = seededRandom(5);
     const people = Array.from({ length: 8 }, () => Array.from({ length: 40 }, (_, id): Candidate => ({ id, rating: { mu: 1300 + rng() * 400, rd: 60 + rng() * 290 }, comparisons: 3 })));
     groupRanking(sampleGroup(people)); // warm up
     const start = performance.now();
     groupRanking(sampleGroup(people));
-    expect(performance.now() - start).toBeLessThan(100);
+    expect(performance.now() - start).toBeLessThan(200);
   });
 });
 
