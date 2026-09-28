@@ -483,6 +483,42 @@ describe('#26 AC4: alone in a session', () => {
   });
 });
 
+describe('#23: a real change of mind', () => {
+  // The #7 simulations have fixed tastes, so they only show what recency costs. Here a person with 10% stray taps
+  // changes their mind at pick 40: their true #10 becomes their favourite. Measured when the design was chosen:
+  // the new favourite reached #1 within 15 picks in 20% of runs, and never (within 60) in 24 of 60; with no
+  // fading, 12% and 37 of 60.
+  const CHANGE = 40;
+  function picksToNewFavourite(seed: number) {
+    const rng = seededRandom(seed);
+    const shuffle = seededRandom(seed * 7919);
+    const trueRank = Array.from({ length: 30 }, (_, i) => i).sort(() => shuffle() - 0.5);
+    const craving = trueRank.indexOf(9);
+    const priors = new Map(trueRank.map((_, id) => [id, 1500]));
+    const comparisons = trueRank.map(() => 0);
+    const picks: Pick[] = [];
+    for (let n = 1; n <= CHANGE + 60; n++) {
+      const ratings = estimateSession(priors, picks);
+      const candidates: Candidate[] = trueRank.map((_, id) => ({ id, rating: ratings.get(id)!, comparisons: comparisons[id] }));
+      if (n > CHANGE && rankSession(candidates)[0].id === craving) return n - CHANGE;
+      const last = picks.at(-1);
+      const [a, b] = choosePair(candidates, rng, last && { pair: [last.a, last.b] }, pendingReask(priors, picks))!;
+      const rank = (id: number) => (n > CHANGE && id === craving ? -1 : trueRank[id]);
+      const prefersA = rank(a) < rank(b) !== rng() < 0.1;
+      picks.push({ a, b, scoreA: prefersA ? 1 : 0 });
+      comparisons[a]++;
+      comparisons[b]++;
+    }
+    return Infinity;
+  }
+
+  it('the new favourite rises to #1 about as often as when the design was chosen', () => {
+    const results = Array.from({ length: 60 }, (_, i) => picksToNewFavourite(i + 1));
+    expect(results.filter((n) => n <= 15).length / 60).toBeGreaterThanOrEqual(0.15);
+    expect(results.filter((n) => n === Infinity).length).toBeLessThanOrEqual(30);
+  });
+}, 60_000);
+
 describe('#23 AC4: older picks do not lower certainty', () => {
   it("a place's rd does not grow as unrelated picks pile up after its own", () => {
     const priors = new Map([0, 1, 2, 3, 4, 5].map((id) => [id, 1500]));
