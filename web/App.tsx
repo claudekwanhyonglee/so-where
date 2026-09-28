@@ -1,7 +1,68 @@
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { api, ApiError } from './api.ts';
+import { Profile } from './Profile.tsx';
+import { Link, usePath } from './router.tsx';
+import { SignIn } from './SignIn.tsx';
+
+export type Me = { id: number; name: string; home: { address: string; lat: number; lng: number } | null };
+
+function useMe() {
+  const [me, setMe] = useState<Me | null | undefined>(undefined);
+  const refresh = useCallback(() => {
+    api<Me>('/me').then(setMe, (err) => {
+      if (err instanceof ApiError && err.status === 401) setMe(null);
+      else throw err;
+    });
+  }, []);
+  useEffect(refresh, [refresh]);
+  return { me, refresh };
+}
+
 export function App() {
+  const { me, refresh } = useMe();
+  const path = usePath();
+
+  if (me === undefined) return null;
+  if (me === null) return <SignIn onSignedIn={refresh} />;
+
   return (
-    <main className="mx-auto max-w-3xl p-4">
-      <h1 className="text-3xl font-black tracking-tight">so-where</h1>
-    </main>
+    <Shell me={me}>
+      {path === '/you' ? <Profile me={me} onChanged={refresh} onSignedOut={refresh} /> : <Home me={me} />}
+    </Shell>
   );
+}
+
+const NAV = [
+  { to: '/', label: 'Pick' },
+  { to: '/you', label: 'You' },
+];
+
+function Shell({ me, children }: { me: Me; children: ReactNode }) {
+  const path = usePath();
+  return (
+    <div className="mx-auto flex min-h-dvh max-w-5xl flex-col gap-5 p-4">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <Link to="/" className="text-2xl font-black tracking-tight text-orange-600">
+          so-where
+        </Link>
+        <nav className="flex gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-stone-200">
+          {NAV.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={`rounded-xl px-3 py-1.5 text-sm font-semibold ${path === item.to ? 'bg-orange-600 text-white' : 'text-stone-600 hover:bg-stone-100'}`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      </header>
+      <p className="text-sm text-stone-500">Hi, {me.name}</p>
+      <main className="flex flex-col gap-4">{children}</main>
+    </div>
+  );
+}
+
+function Home({ me }: { me: Me }) {
+  return <h1 className="text-3xl font-black tracking-tight">Where to, {me.name}?</h1>;
 }

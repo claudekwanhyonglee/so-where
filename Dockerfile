@@ -17,6 +17,8 @@ COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/dist dist
 COPY --from=build /app/server server
+RUN printf '#!/bin/sh\nexec node /app/server/reset-pin.ts "$@"\n' > /usr/local/bin/reset-pin \
+ && chmod +x /usr/local/bin/reset-pin
 VOLUME /data
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s \

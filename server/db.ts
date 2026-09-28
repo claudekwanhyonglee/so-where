@@ -5,7 +5,24 @@ import Database from 'better-sqlite3';
 export type Db = Database.Database;
 
 // Append-only: each entry runs once, in order, tracked by PRAGMA user_version.
-export const migrations: string[] = [];
+export const migrations: string[] = [
+  `CREATE TABLE people (
+     id INTEGER PRIMARY KEY,
+     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+     pin_hash TEXT NOT NULL,
+     failed_pins INTEGER NOT NULL DEFAULT 0,
+     locked_until INTEGER NOT NULL DEFAULT 0,
+     home_address TEXT,
+     home_lat REAL,
+     home_lng REAL
+   );
+   CREATE TABLE device_sessions (
+     token_hash TEXT PRIMARY KEY,
+     person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+     created_at INTEGER NOT NULL
+   );
+   CREATE TABLE geocode_cache (key TEXT PRIMARY KEY, result TEXT NOT NULL);`,
+];
 
 export function migrate(db: Db, steps: string[] = migrations) {
   const applied = db.pragma('user_version', { simple: true }) as number;
