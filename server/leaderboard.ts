@@ -1,6 +1,6 @@
 import type { Db } from './db.ts';
 import { getPlace } from './places.ts';
-import { groupRanking, inBottomThird, rankSession } from './ranking.ts';
+import { confidenceIn, groupRanking, inBottomThird, isPrettySure, rankSession, sampleGroup } from './ranking.ts';
 import { personState, sessionMembers, type Session } from './sessions.ts';
 
 /**
@@ -12,7 +12,9 @@ export function leaderboard(db: Db, session: Session) {
     const { candidates, pickCount } = personState(db, session, member.id);
     return { ...member, picks: pickCount, candidates, ranked: rankSession(candidates) };
   });
-  const group = groupRanking(people.map((p) => p.candidates));
+  const samples = sampleGroup(people.map((p) => p.candidates));
+  const group = groupRanking(samples);
+  const [top] = group.keys();
   const names = new Map([...group.keys()].map((id) => [id, getPlace(db, id)!]));
 
   const combined = [...group.keys()].map((placeId) => {
@@ -37,5 +39,7 @@ export function leaderboard(db: Db, session: Session) {
       ranking: ranked.map((c) => ({ placeId: c.id, name: names.get(c.id)!.name, vetoed: !!c.vetoed })),
     })),
     combined,
+    // Only the verdict leaves the server: no confidence number is shown anywhere.
+    prettySure: top !== undefined && isPrettySure(confidenceIn(top, samples), people.map((p) => p.picks)),
   };
 }

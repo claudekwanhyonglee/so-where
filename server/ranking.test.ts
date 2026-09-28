@@ -4,6 +4,7 @@ import {
   DEFAULT_RATING,
   estimateSession,
   groupRanking,
+  sampleGroup,
   isUpset,
   pendingReask,
   rankSession,
@@ -377,7 +378,7 @@ describe('#23 AC3: a surprising reversal is asked again within 5 pairs', () => {
 /** A person whose settled scores are given in place-id order. */
 const settledPerson = (scores: number[], vetoed: number[] = []): Candidate[] =>
   scores.map((mu, id) => ({ id, rating: { mu, rd: 60 }, comparisons: 10, vetoed: vetoed.includes(id) }));
-const groupOrder = (people: Candidate[][]) => [...groupRanking(people)].map(([id]) => id);
+const groupOrder = (people: Candidate[][]) => [...groupRanking(sampleGroup(people))].map(([id]) => id);
 
 describe('#24 AC1: each person counts equally', () => {
   it('a place ranked #2 and #1 beats one ranked #1 and #3, even when one person spreads their scores far wider', () => {
@@ -418,7 +419,7 @@ describe('#24 AC3: vetoes', () => {
   it('if every place is vetoed by someone, the top pick has the fewest vetoes', () => {
     // Place 3 is everyone's favourite but has two vetoes; places 0–2 have one each.
     const people = [settledPerson([1500, 1400, 1300, 2000], [0, 3]), settledPerson([1500, 1400, 1300, 2000], [1, 3]), settledPerson([1500, 1400, 1300, 2000], [2])];
-    const ranking = groupRanking(people);
+    const ranking = groupRanking(sampleGroup(people));
     const [top] = ranking.values();
     expect(top.vetoes).toBe(1);
     expect(groupOrder(people).at(-1)).toBe(3);
@@ -429,7 +430,7 @@ describe('#24 AC4: no jitter', () => {
   it('the same ratings always give the same order and chances', () => {
     const rng = seededRandom(3);
     const people = Array.from({ length: 4 }, () => Array.from({ length: 12 }, (_, id): Candidate => ({ id, rating: { mu: 1500 + rng() * 50, rd: 300 }, comparisons: 1 })));
-    expect([...groupRanking(people)]).toEqual([...groupRanking(people)]);
+    expect([...groupRanking(sampleGroup(people))]).toEqual([...groupRanking(sampleGroup(people))]);
   });
 });
 
@@ -437,9 +438,9 @@ describe('#24 AC6: fast enough', () => {
   it('ranks 8 people × 40 places in well under 200 ms', () => {
     const rng = seededRandom(5);
     const people = Array.from({ length: 8 }, () => Array.from({ length: 40 }, (_, id): Candidate => ({ id, rating: { mu: 1300 + rng() * 400, rd: 60 + rng() * 290 }, comparisons: 3 })));
-    groupRanking(people); // warm up
+    groupRanking(sampleGroup(people)); // warm up
     const start = performance.now();
-    groupRanking(people);
+    groupRanking(sampleGroup(people));
     expect(performance.now() - start).toBeLessThan(100);
   });
 });

@@ -7,6 +7,7 @@ const placeLink = (hex: string, name: string) =>
 type Board = {
   people: { id: number; name: string; picks: number; ranking: { placeId: number; name: string; vetoed: boolean }[] }[];
   combined: { placeId: number; name: string; positions: Record<string, number>; bottomThirdFor: number[]; vetoedBy: number[] }[];
+  prettySure: boolean;
 };
 
 // Six places so "bottom third" is two places.
@@ -155,6 +156,57 @@ describe('#24 AC6: fast enough', () => {
     expect(performance.now() - start).toBeLessThan(200);
     expect((await res.json()).combined).toHaveLength(40);
   }, 60_000);
+});
+
+describe('#25: "Pretty sure"', () => {
+  it('AC1 + AC4: is only flagged once everyone has made 8 picks and the group clearly agrees', async () => {
+    const { alex, jo, board, prefer, ids, sessionId } = await setup();
+    // 4 consistent picks each: the same favourite, but too few picks.
+    for (const who of [alex, jo]) for (const loser of ids.slice(1, 5)) await who.post(`/api/sessions/${sessionId}/picks`, { a: ids[0], b: loser, winner: ids[0] });
+    expect((await board()).prettySure).toBe(false);
+
+    await prefer(alex, ids.slice(0, 6));
+    await prefer(jo, ids.slice(0, 6));
+    await prefer(alex, ids.slice(0, 6));
+    await prefer(jo, ids.slice(0, 6));
+    const settled = await board();
+    expect(settled.combined[0].placeId).toBe(ids[0]);
+    expect(settled.prettySure).toBe(true);
+  });
+
+  it('AC1 + AC4: is not flagged when the picks say little, however many there are', async () => {
+    const { alex, jo, board, ids, sessionId } = await setup();
+    for (const who of [alex, jo]) for (let i = 0; i < 10; i++) await who.post(`/api/sessions/${sessionId}/picks`, { a: ids[i % 6], b: ids[(i + 1) % 6], winner: null });
+    expect((await board()).prettySure).toBe(false);
+  });
+
+  it('AC1: a near-tie between two favourites still counts (agreed with the user: either is a right pick)', async () => {
+    const { alex, jo, board, prefer, ids } = await setup();
+    for (let i = 0; i < 2; i++) {
+      await prefer(alex, ids.slice(0, 6));
+      await prefer(jo, [ids[1], ids[0], ...ids.slice(2, 6)]); // the two favourites swapped
+    }
+    const data = await board();
+    expect(data.combined.slice(0, 2).map((r) => r.placeId).sort()).toEqual([ids[0], ids[1]].sort());
+    expect(data.prettySure).toBe(true);
+  });
+
+  it('AC4: the leaderboard carries no confidence number', async () => {
+    const { alex, board, prefer, ids } = await setup();
+    await prefer(alex, ids.slice(0, 6));
+    const data = await board();
+    expect(Object.keys(data).sort()).toEqual(['combined', 'people', 'prettySure']);
+    for (const row of data.combined) expect(Object.keys(row).sort()).toEqual(['bottomThirdFor', 'name', 'placeId', 'positions', 'suburb', 'vetoedBy']);
+  });
+
+  it('AC6: picking carries on normally afterwards', async () => {
+    const { alex, jo, board, prefer, ids, sessionId } = await setup();
+    for (let i = 0; i < 2; i++) for (const who of [alex, jo]) await prefer(who, ids.slice(0, 6));
+    expect((await board()).prettySure).toBe(true);
+    const res = await alex.post(`/api/sessions/${sessionId}/picks`, { a: ids[2], b: ids[3], winner: ids[2] });
+    expect(res.status).toBe(200);
+    expect((await res.json()).pair).toHaveLength(2);
+  });
 });
 
 describe('#9 AC5: only the session\'s set', () => {

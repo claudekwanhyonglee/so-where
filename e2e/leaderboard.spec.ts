@@ -136,6 +136,51 @@ test('#18 AC5: a place that moved up since the last poll gets ▲', async ({ pag
   await expect(rowFor(page, c.name)).not.toContainText('▲');
 });
 
+for (const motion of ['no-preference', 'reduce'] as const) {
+  test(`#25 AC1–AC4 + AC6: the "Pretty sure" flame (${motion === 'reduce' ? 'still with reduced motion' : 'animated'})`, async ({ page, browser }) => {
+    await page.emulateMedia({ reducedMotion: motion });
+    const host = await hostSession(page, 6);
+    const friend = await newPerson(browser, 'Flame', host.path);
+    const ids = host.places.map((p) => p.id);
+    const agreeOnce = async (who: Page) => {
+      for (let i = 0; i + 1 < ids.length; i++) await host.pick(ids[i], ids[i + 1], who);
+    };
+
+    // AC4: before everyone has made 8 picks, no flame and no confidence wording or number anywhere.
+    await agreeOnce(page);
+    await agreeOnce(friend.page);
+    await expect(topPick(page)).toContainText(host.places[0].name, { timeout: 5_000 });
+    for (const p of [page, friend.page]) {
+      await expect(p.getByText(/pretty sure|confiden|certain|likely/i)).toHaveCount(0);
+      await expect(p.getByText(/\d\s*%/)).toHaveCount(0);
+    }
+
+    // AC1: once everyone has 8+ picks and agrees, the top pick card shows the flame and the words.
+    for (let round = 0; round < 3; round++) for (const who of [page, friend.page]) await agreeOnce(who);
+    const card = topPick(page);
+    await expect(card.getByText('Statistically "Pretty sure"', { exact: true })).toBeVisible({ timeout: 5_000 });
+
+    // AC2: a drawn flame in the palette, not an emoji or icon-font character.
+    const flame = card.getByTestId('flame');
+    await expect(flame).toBeVisible();
+    expect(await flame.evaluate((svg) => svg.tagName.toLowerCase())).toBe('svg');
+    const fills = await flame.locator('path').evaluateAll((paths) => paths.map((p) => getComputedStyle(p).fill));
+    expect(fills).toEqual(['rgb(232, 67, 44)', 'rgb(255, 201, 60)']); // tomato #e8432c, mustard #ffc93c
+    expect(await card.innerText()).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // AC3: it moves, except with reduced motion.
+    const animations = await flame.locator('path').evaluateAll((paths) => paths.map((p) => getComputedStyle(p).animationName));
+    if (motion === 'reduce') expect(animations).toEqual(['none', 'none']);
+    else expect(animations).toEqual(['flicker', 'flicker']);
+
+    // AC6: picking carries on.
+    const pick = page.getByRole('region', { name: 'Pick', exact: true });
+    await expect(pick.getByRole('article')).toHaveCount(2);
+    await pick.getByRole('article').first().getByRole('button', { name: /^pick /i }).click();
+    await expect(pick.getByRole('article')).toHaveCount(2);
+  });
+}
+
 /** Records, for each view transition, how many ::view-transition animations ran. */
 const countViewTransitionAnimations = () => {
   const counts: number[] = [];

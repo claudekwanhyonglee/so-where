@@ -266,35 +266,70 @@ export const inBottomThird = (position: number, count: number) => position > cou
 const GROUP_SAMPLES = 1000;
 const GROUP_SEED = 22; // fixed, so the same answers always give the same result
 
+/**
+ * One plausible version of the evening, indexed by place position (as in GroupSamples.placeIds): each person's
+ * drawn score for every place, and the fair-rule score that gives each place.
+ */
+export type GroupSample = { draws: Float64Array[]; scores: Float64Array };
+
+/** Many plausible versions of the evening. Only contenders (the places with the fewest vetoes, normally none) can be best. */
+export type GroupSamples = { placeIds: number[]; vetoes: Map<number, number>; contenders: number[]; samples: GroupSample[] };
+
+/** Draws everyone's scores from their ratings many times, and scores each place by the fair rule in each draw. */
+export function sampleGroup(people: Candidate[][]): GroupSamples {
+  const placeIds = people[0]?.map((c) => c.id) ?? [];
+  const position = new Map(placeIds.map((id, i) => [id, i]));
+  const byPosition = people.map((person) => [...person].sort((a, b) => position.get(a.id)! - position.get(b.id)!));
+  const vetoCounts = placeIds.map((_, i) => byPosition.filter((p) => p[i].vetoed).length);
+  const fewestVetoes = Math.min(...vetoCounts);
+  const rng = seededRandom(GROUP_SEED);
+  return {
+    placeIds,
+    vetoes: new Map(placeIds.map((id, i) => [id, vetoCounts[i]])),
+    contenders: placeIds.filter((_, i) => vetoCounts[i] === fewestVetoes),
+    samples: placeIds.length === 0 ? [] : Array.from({ length: GROUP_SAMPLES }, () => fairSample(byPosition, rng)),
+  };
+}
+
+/** The contender (by position) with the highest fair-rule score in one sample. */
+const bestPosition = ({ scores }: GroupSample, contenders: number[]) => contenders.reduce((top, i) => (scores[i] > scores[top] ? i : top));
+
+const NEAR_BEST = 0.1; // fair-rule points: a tenth of the way from someone's last place to their first
+const PRETTY_SURE = 0.8;
+const PRETTY_SURE_MIN_PICKS = 8; // each
+
+/**
+ * How sure we are that a place (normally the top pick) is a right choice: the share of samples in which it's
+ * as good as the best contender, give or take a near-tie. Asking for "exactly the best" instead stalls whenever
+ * two places are nearly tied for the group, however many picks people make.
+ */
+export function confidenceIn(placeId: number, { placeIds, contenders, samples }: GroupSamples) {
+  const me = placeIds.indexOf(placeId);
+  const rivals = contenders.map((id) => placeIds.indexOf(id)).filter((i) => i !== me);
+  const right = ({ scores }: GroupSample) => rivals.every((i) => scores[i] <= scores[me] + NEAR_BEST);
+  return samples.length ? samples.filter(right).length / samples.length : 0;
+}
+
+/** "Pretty sure": confident in the top pick, and everyone has had their say. */
+export const isPrettySure = (confidence: number, picksEach: number[]) => confidence >= PRETTY_SURE && picksEach.every((n) => n >= PRETTY_SURE_MIN_PICKS);
+
 /** score: the place's average fair-rule score (its expected value); chance: how likely it is the group's best. */
 export type GroupStanding = { chance: number; score: number; vetoes: number };
 
 /**
- * The group's ranking, best first, from everyone's candidates (the same places for each person).
- * Draws plausible scores for everyone from their ratings many times and scores each place by the fair rule in
- * each draw. Ordered by vetoes (fewest first), then average score: the best evening on average, so a place
- * someone probably dislikes pays for that in proportion. Ranking by chance of being best instead would favour
- * divisive, uncertain places. The chance (only places with the fewest vetoes can be best) breaks ties, and says
- * how sure we are.
+ * The group's ranking, best first. Ordered by vetoes (fewest first), then average score: the best evening on
+ * average, so a place someone probably dislikes pays for that in proportion. Ranking by chance of being best
+ * instead would favour divisive, uncertain places. The chance breaks ties.
  */
-export function groupRanking(people: Candidate[][]): Map<number, GroupStanding> {
-  const placeIds = people[0]?.map((c) => c.id) ?? [];
-  if (placeIds.length === 0) return new Map();
-  const vetoes = new Map(placeIds.map((id) => [id, people.filter((p) => p.some((c) => c.id === id && c.vetoed)).length]));
-  const fewestVetoes = Math.min(...vetoes.values());
-  const contenders = placeIds.filter((id) => vetoes.get(id) === fewestVetoes);
-
-  const wins = new Map(placeIds.map((id) => [id, 0]));
-  const totals = new Map(placeIds.map((id) => [id, 0]));
-  const rng = seededRandom(GROUP_SEED);
-  for (let s = 0; s < GROUP_SAMPLES; s++) {
-    const score = fairScores(people, rng);
-    const best = contenders.reduce((top, id) => (score.get(id)! > score.get(top)! ? id : top));
-    wins.set(best, wins.get(best)! + 1);
-    for (const id of placeIds) totals.set(id, totals.get(id)! + score.get(id)!);
+export function groupRanking({ placeIds, vetoes, contenders, samples }: GroupSamples): Map<number, GroupStanding> {
+  const contenderPositions = contenders.map((id) => placeIds.indexOf(id));
+  const wins = placeIds.map(() => 0);
+  const totals = placeIds.map(() => 0);
+  for (const sample of samples) {
+    wins[bestPosition(sample, contenderPositions)]++;
+    placeIds.forEach((_, i) => (totals[i] += sample.scores[i]));
   }
-
-  const standings = placeIds.map((id): [number, GroupStanding] => [id, { chance: wins.get(id)! / GROUP_SAMPLES, score: totals.get(id)! / GROUP_SAMPLES, vetoes: vetoes.get(id)! }]);
+  const standings = placeIds.map((id, i): [number, GroupStanding] => [id, { chance: wins[i] / samples.length, score: totals[i] / samples.length, vetoes: vetoes.get(id)! }]);
   return new Map(standings.sort(([, a], [, b]) => a.vetoes - b.vetoes || b.score - a.score || b.chance - a.chance));
 }
 
@@ -304,19 +339,17 @@ export function groupRanking(people: Candidate[][]): Map<number, GroupStanding> 
  * who has it in their bottom third. A veto counts as last and bottom third; that only decides anything when
  * every place is vetoed by someone.
  */
-function fairScores(people: Candidate[][], rng: () => number) {
-  const score = new Map<number, number>();
-  const add = (id: number, points: number) => score.set(id, (score.get(id) ?? 0) + points);
-  for (const person of people) {
-    const kept = person
-      .filter((c) => !c.vetoed)
-      .map((c) => ({ id: c.id, draw: c.rating.mu + c.rating.rd * normal(rng) }))
-      .sort((a, b) => b.draw - a.draw);
-    kept.forEach(({ id }, i) => {
-      const percentile = kept.length > 1 ? (kept.length - 1 - i) / (kept.length - 1) : 1;
-      add(id, percentile / people.length - (inBottomThird(i + 1, kept.length) ? 1 : 0));
+function fairSample(people: Candidate[][], rng: () => number): GroupSample {
+  const scores = new Float64Array(people[0].length);
+  const draws = people.map((person) => {
+    const drawn = Float64Array.from(person, (c) => c.rating.mu + c.rating.rd * normal(rng));
+    const kept = person.flatMap((c, i) => (c.vetoed ? [] : [i])).sort((a, b) => drawn[b] - drawn[a]);
+    kept.forEach((i, rank) => {
+      const percentile = kept.length > 1 ? (kept.length - 1 - rank) / (kept.length - 1) : 1;
+      scores[i] += percentile / people.length - (inBottomThird(rank + 1, kept.length) ? 1 : 0);
     });
-    for (const c of person) if (c.vetoed) add(c.id, -1);
-  }
-  return score;
+    person.forEach((c, i) => c.vetoed && (scores[i] -= 1));
+    return drawn;
+  });
+  return { draws, scores };
 }
