@@ -7,7 +7,7 @@ const inBottomThird = (position: number, count: number) => position > count - Ma
 
 /**
  * Everyone's ranking for the session, plus a combined one by average score.
- * A place someone marked "Absolutely not" counts as their lowest score, so it sinks for the group too.
+ * A place someone marked "Absolutely not" counts as their lowest score, and goes below every place nobody ruled out.
  */
 export function leaderboard(db: Db, session: Session) {
   const people = sessionMembers(db, session.id).map((member) => {
@@ -37,7 +37,7 @@ export function leaderboard(db: Db, session: Session) {
       const { name, suburb } = names.get(placeId)!;
       return { placeId, name, suburb, average: Math.round(average), positions, bottomThirdFor, vetoedBy };
     })
-    .sort((a, b) => b.average - a.average);
+    .sort((a, b) => Number(a.vetoedBy.length > 0) - Number(b.vetoedBy.length > 0) || b.average - a.average);
 
   return {
     people: people.map(({ id, name, picks, ranked }) => ({

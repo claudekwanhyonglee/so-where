@@ -1,5 +1,5 @@
 import { Ban, ChevronLeft, Copy, ExternalLink, Share2, TramFront } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useRef, useState, ViewTransition } from 'react';
 import { toast } from 'sonner';
 import { api, errorMessage } from './api.ts';
 import { Leaderboard, type Board } from './Leaderboard.tsx';
@@ -167,8 +167,12 @@ function Picker({ sessionId, onChanged }: { sessionId: string; onChanged: () => 
     api<PairResponse>(`${base}/pair`).then(setState, (err) => setError(errorMessage(err)));
   }, [base]);
 
+  /** Swaps in the next pair as a view transition: the old pair fades, the new one slides in. */
   const show = (next: PairResponse) => {
-    setState(next);
+    startTransition(() => {
+      setState(next);
+      setChosen(null);
+    });
     onChanged();
   };
 
@@ -183,10 +187,10 @@ function Picker({ sessionId, onChanged }: { sessionId: string; onChanged: () => 
       return next;
     } catch (err) {
       setError(errorMessage(err));
+      setChosen(null);
       return null;
     } finally {
       busy.current = false;
-      setChosen(null);
     }
   };
 
@@ -220,13 +224,15 @@ function Picker({ sessionId, onChanged }: { sessionId: string; onChanged: () => 
       {error && <Notice tone="error">{error}</Notice>}
       {pair ? (
         <>
-          <div key={`${pair[0].id}-${pair[1].id}-${state.picks}`} className="flex flex-col desk:flex-row">
-            <PlaceCard sessionId={sessionId} place={pair[0]} position="first" state={cardState(pair[0].id)} onPick={() => choose(pair[0].id)} onVeto={() => veto(pair[0])} />
-            <span aria-hidden="true" className="pointer-events-none relative z-[2] -my-[17px] grid size-11 place-items-center self-center rounded-full bg-ink text-[13px] font-extrabold tracking-[.04em] text-mustard ring-[5px] ring-peach desk:-mx-[17px] desk:my-0">
-              OR
-            </span>
-            <PlaceCard sessionId={sessionId} place={pair[1]} position="second" state={cardState(pair[1].id)} onPick={() => choose(pair[1].id)} onVeto={() => veto(pair[1])} />
-          </div>
+          <ViewTransition key={`${pair[0].id}-${pair[1].id}-${state.picks}`} enter="pair-enter" exit="pair-exit">
+            <div className="flex flex-col desk:flex-row">
+              <PlaceCard sessionId={sessionId} place={pair[0]} position="first" state={cardState(pair[0].id)} onPick={() => choose(pair[0].id)} onVeto={() => veto(pair[0])} />
+              <span aria-hidden="true" className="pointer-events-none relative z-[2] -my-[17px] grid size-11 place-items-center self-center rounded-full bg-ink text-[13px] font-extrabold tracking-[.04em] text-mustard ring-[5px] ring-peach desk:-mx-[17px] desk:my-0">
+                OR
+              </span>
+              <PlaceCard sessionId={sessionId} place={pair[1]} position="second" state={cardState(pair[1].id)} onPick={() => choose(pair[1].id)} onVeto={() => veto(pair[1])} />
+            </div>
+          </ViewTransition>
           <div className="flex items-center justify-center gap-4">
             <KeyHint keys={['←', '→']}>pick</KeyHint>
             <Button variant="secondary" onClick={() => choose(null)}>
@@ -298,7 +304,7 @@ function useTransitTime(sessionId: string, placeId: number) {
 }
 
 const cardMotion = {
-  idle: 'animate-enter hover:-translate-y-0.5',
+  idle: 'hover:-translate-y-0.5',
   chosen: 'scale-[1.03] shadow-[0_0_0_4px_var(--color-peach),0_0_0_7px_var(--card),0_22px_36px_-16px_rgba(0,0,0,.35)]',
   lost: 'scale-[.97] opacity-35',
 };
@@ -327,7 +333,7 @@ function PlaceCard({
   return (
     <article
       style={{ background: bg, color: fg, ['--card' as string]: bg }}
-      className={`relative flex min-h-[170px] flex-1 flex-col rounded-[28px] p-[18px] transition duration-200 desk:min-h-[280px] desk:rounded-[34px] desk:p-7 ${seam} ${cardMotion[state]} ${position === 'second' ? '[animation-delay:50ms]' : ''}`}
+      className={`relative flex min-h-[170px] flex-1 flex-col rounded-[28px] p-[18px] transition-[transform,opacity,box-shadow] duration-200 desk:min-h-[280px] desk:rounded-[34px] desk:p-7 ${seam} ${cardMotion[state]}`}
     >
       <button aria-label={`Pick ${place.name}`} onClick={onPick} className="absolute inset-0 rounded-[inherit]" />
       <button aria-label="Absolutely not" title="Absolutely not" onClick={onVeto} className={`absolute top-3.5 right-3.5 z-10 grid size-9 place-items-center rounded-full ${pill}`}>

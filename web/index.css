@@ -23,13 +23,31 @@
   --color-edge: #f0dccf;
   --color-divider: #f3e4da;
   --color-soft: #f6e6dc;
+}
 
-  --animate-enter: enter 0.32s cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
-  @keyframes enter {
-    from {
-      opacity: 0;
-      transform: translateY(14px) scale(0.97);
-    }
+/* View transitions: leaderboard rows glide to their new places; a new pair of cards slides in as the old one fades. */
+::view-transition-group(*) {
+  animation-duration: 0.35s;
+}
+/* Live updates animate while people are tapping: let taps through to the page underneath. */
+::view-transition {
+  pointer-events: none;
+}
+::view-transition-new(.pair-enter):only-child {
+  animation: pair-enter 0.32s cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+::view-transition-old(.pair-exit):only-child {
+  animation: pair-exit 0.15s ease both;
+}
+@keyframes pair-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+}
+@keyframes pair-exit {
+  to {
+    opacity: 0;
   }
 }
 

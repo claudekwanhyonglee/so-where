@@ -84,7 +84,9 @@ test('#8 AC6: cards stack on a phone and sit side by side on a desktop', async (
   expect(a.x + a.width).toBeLessThanOrEqual(390);
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  [a, b] = [(await first.boundingBox())!, (await second.boundingBox())!];
+  await page.mouse.move(0, 0); // not hovering (and so lifting) either card
+  await settled(page);
+  [a, b] =[(await first.boundingBox())!, (await second.boundingBox())!];
   expect(Math.abs(a.y - b.y)).toBeLessThan(2); // same row
   expect(b.x).toBeGreaterThanOrEqual(a.x + a.width - 1); // side by side
 });

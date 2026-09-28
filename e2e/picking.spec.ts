@@ -16,9 +16,9 @@ async function openSession(page: Page, count: number) {
   return { sessionId: id as string, places, idOf: (name: string) => places.find((p) => p.name === name)!.id };
 }
 
-const cards = (page: Page) => page.getByRole('region', { name: 'Pick' }).getByRole('article');
+const cards = (page: Page) => page.getByRole('region', { name: 'Pick', exact: true }).getByRole('article');
 const cardName = async (page: Page, i: number) => (await cards(page).nth(i).getByRole('heading').innerText()).trim();
-const pickCount = (page: Page, n: number) => expect(page.getByRole('region', { name: 'Pick' }).getByText(n === 1 ? '1 pick' : `${n} picks`, { exact: true })).toBeVisible();
+const pickCount = (page: Page, n: number) => expect(page.getByRole('region', { name: 'Pick', exact: true }).getByText(n === 1 ? '1 pick' : `${n} picks`, { exact: true })).toBeVisible();
 
 test('#17 AC1: cards show name, suburb, note, Maps link and directions; a place keeps its colour', async ({ page }) => {
   await signUp(page, uniqueName('Looker'));
@@ -158,7 +158,7 @@ test('#17 AC8: a Pick / Leaderboard toggle on phones; both side by side on deskt
   await signUp(page, uniqueName('Toggler'));
   await openSession(page, 2);
   const toggle = page.getByRole('group', { name: 'Session view' });
-  const picker = page.getByRole('region', { name: 'Pick' });
+  const picker = page.getByRole('region', { name: 'Pick', exact: true });
   const board = page.getByRole('region', { name: 'Leaderboard' });
 
   await expect(picker).toBeVisible();
