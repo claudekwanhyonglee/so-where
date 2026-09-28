@@ -32,18 +32,20 @@ test('#3 AC6 + AC7 + AC8 + AC9: profile — home address, PIN change with warnin
   await signUp(page, name);
   await page.getByRole('link', { name: /you/i }).click();
 
-  await page.getByLabel('Home address').fill('Nowhere Lane');
-  await page.getByRole('button', { name: /save address/i }).click();
-  await expect(page.getByText(/couldn.t find that address/i)).toBeVisible();
+  await page.getByRole('button', { name: /^Home address/ }).click();
+  const home = page.getByRole('dialog', { name: 'Home address' });
+  await home.getByLabel('Address').fill('Nowhere Lane');
+  await home.getByRole('button', { name: /save address/i }).click();
+  await expect(home.getByText(/couldn.t find that address/i)).toBeVisible();
 
-  await page.getByLabel('Home address').fill('1 Lygon St, Carlton');
-  await page.getByRole('button', { name: /save address/i }).click();
+  await home.getByLabel('Address').fill('1 Lygon St, Carlton');
+  await home.getByRole('button', { name: /save address/i }).click();
   await expect(page.getByText(/home saved/i)).toBeVisible();
 
-  const changePin = page.getByRole('region', { name: /change pin/i });
+  await page.getByRole('button', { name: 'Change PIN' }).click();
+  const changePin = page.getByRole('dialog', { name: 'New PIN' });
   await expect(changePin.getByText(PIN_WARNING)).toBeVisible();
-  await changePin.getByLabel('New 4-digit PIN').fill('9753');
-  await changePin.getByRole('button', { name: /change pin/i }).click();
+  await changePin.getByLabel('4-digit PIN').fill('9753');
   await expect(page.getByText(/pin changed/i)).toBeVisible();
 
   await page.getByRole('button', { name: /sign out/i }).click();

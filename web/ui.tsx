@@ -9,7 +9,6 @@ import {
   type FormEvent,
   type InputHTMLAttributes,
   type ReactNode,
-  type SelectHTMLAttributes,
 } from 'react';
 import { errorMessage } from './api.ts';
 import { swatch } from './model.ts';
@@ -82,50 +81,8 @@ export function Field({ label, hint, error, ...props }: { label: string; hint?: 
   );
 }
 
-export function Select({ label, children, ...props }: { label: string } & SelectHTMLAttributes<HTMLSelectElement>) {
-  const id = useId();
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-[13px] font-bold">
-        {label}
-      </label>
-      <select id={id} className={inputBox} {...props}>
-        {children}
-      </select>
-    </div>
-  );
-}
-
-export const PinField = (props: { label: string; value: string; onChange: (pin: string) => void }) => (
-  <Field
-    label={props.label}
-    type="password"
-    inputMode="numeric"
-    autoComplete="off"
-    pattern="\d{4}"
-    maxLength={4}
-    required
-    value={props.value}
-    onChange={(e) => props.onChange(e.target.value.replace(/\D/g, ''))}
-  />
-);
-
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={`rounded-[22px] bg-white p-5 ring-1 ring-edge ${className}`}>{children}</div>;
-}
-
-export function Section({ title, children }: { title: string; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id}>
-      <Card className="flex flex-col gap-4">
-        <h2 id={id} className="font-display text-[22px]/tight">
-          {title}
-        </h2>
-        {children}
-      </Card>
-    </section>
-  );
 }
 
 export function Notice({ tone, children }: { tone: 'error' | 'ok' | 'info'; children: ReactNode }) {
