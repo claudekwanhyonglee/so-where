@@ -83,6 +83,20 @@ describe('#9 AC3: flags', () => {
   });
 });
 
+describe('#18 AC4: vetoed places go last', () => {
+  it('lists every vetoed place after every place nobody ruled out', async () => {
+    const { alex, jo, board, prefer, ids, sessionId, idOf } = await setup();
+    // Everyone loves A; Jo still says "Absolutely not" to it. F is everyone's last.
+    await prefer(alex, ids.slice(0, 6));
+    await prefer(jo, ids.slice(0, 6));
+    await jo.post(`/api/sessions/${sessionId}/vetoes`, { placeId: idOf('Invented A') });
+
+    const { combined } = await board();
+    expect(combined.at(-1)!.name).toBe('Invented A');
+    expect(combined.at(-2)!.name).toBe('Invented F');
+  });
+});
+
 describe('#9 AC5: only the session\'s set', () => {
   it('shows only places in the set', async () => {
     const { board, ids } = await setup();

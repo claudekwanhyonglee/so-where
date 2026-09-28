@@ -11,7 +11,7 @@ import { INVITE } from './helpers.ts';
 const db = openDb(join(mkdtempSync(join(tmpdir(), 'so-where-e2e-')), 'e2e.db'));
 
 const externals = fakeFetch(
-  fakeNominatim({ '1 Lygon St, Carlton': { lat: -37.7983, lng: 144.9669 } }),
+  fakeNominatim({ '1 Pretend St, Carlton': { lat: -37.79, lng: 144.97 } }),
   fakeTransitous([1500]), // every trip: 25 minutes
 );
 

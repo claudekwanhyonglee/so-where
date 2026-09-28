@@ -7,10 +7,11 @@ import type { Db } from './db.ts';
 import { parsePlaceUrl, placeKey } from './google-maps.ts';
 import type { PlaceLookup } from './place-lookup.ts';
 import { findPlaceByKey } from './places.ts';
+import { setName } from './sets.ts';
 
 type ImportRow = { key: string; name: string; note: string; lat: number | null; lng: number | null; lookupQuery: string };
 type Parsed = { rows: ImportRow[]; skipped: number };
-export type ImportReport = { added: number; existing: number; skipped: number; lists: string[] };
+export type ImportReport = { added: number; existing: number; skipped: number; lists: string[]; sets: { id: number; name: string }[] };
 
 class ImportError extends Error {}
 
@@ -109,7 +110,7 @@ function parseFile(file: { name: string; text: string }): Parsed & { list?: stri
 
 export function importTakeout(db: Db, now: number, files: { name: string; text: string }[]): ImportReport {
   const parsed = files.map(parseFile);
-  const report: ImportReport = { added: 0, existing: 0, skipped: 0, lists: [] };
+  const report: ImportReport = { added: 0, existing: 0, skipped: 0, lists: [], sets: [] };
 
   const insertPlace = db.prepare(
     'INSERT INTO places (key, name, lat, lng, note, created_at, lookup_pending, lookup_query) VALUES (?, ?, ?, ?, ?, ?, 1, ?)',
@@ -124,6 +125,7 @@ export function importTakeout(db: Db, now: number, files: { name: string; text: 
       report.skipped += skipped;
       const setId = list ? (upsertSet.get(list, list, now) as { id: number }).id : undefined;
       if (list) report.lists.push(list);
+      if (setId !== undefined && !report.sets.some((s) => s.id === setId)) report.sets.push({ id: setId, name: setName(db, setId)! });
       for (const row of rows) {
         const existing = findPlaceByKey(db, row.key);
         const placeId = existing ? existing.id : Number(insertPlace.run(row.key, row.name, row.lat, row.lng, row.note, now, row.lookupQuery).lastInsertRowid);

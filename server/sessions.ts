@@ -135,18 +135,24 @@ export function sessionsRoutes({ db, config, now, fetch }: Deps) {
   };
   const notFound = (c: Context) => c.json({ error: 'No such session.' }, 404);
 
-  api.get('/', (c) =>
-    c.json(
-      db
-        .prepare(
-          `SELECT s.id, s.set_id AS setId, coalesce(st.name, 'All places') AS setName, s.created_at AS createdAt,
-                  (SELECT count(*) FROM session_members m WHERE m.session_id = s.id) AS memberCount
-           FROM sessions s LEFT JOIN sets st ON st.id = s.set_id
-           ORDER BY s.created_at DESC LIMIT 20`,
-        )
-        .all(),
-    ),
-  );
+  api.get('/', (c) => {
+    const sessions = db.prepare('SELECT * FROM sessions ORDER BY created_at DESC LIMIT 20').all() as Session[];
+    return c.json(
+      sessions.map((s) => {
+        const members = sessionMembers(db, s.id);
+        const top = leaderboard(db, s).combined.find((row) => row.vetoedBy.length === 0);
+        return {
+          id: s.id,
+          setId: s.set_id,
+          setName: setName(db, sessionSet(s)),
+          createdAt: s.created_at,
+          memberCount: members.length,
+          members,
+          topPick: top?.name ?? null,
+        };
+      }),
+    );
+  });
 
   api.post('/', async (c) => {
     const setId = parseSetId(String((await c.req.json()).setId ?? ''));

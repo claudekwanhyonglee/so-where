@@ -1,9 +1,16 @@
 import { useEffect, useState, type AnchorHTMLAttributes } from 'react';
 
+/** The current path, with old /sets and /sets/<id> URLs rewritten in place to their Places equivalents. */
+function currentPath() {
+  const legacy = location.pathname.match(/^\/sets(\/[^/]+)?\/?$/);
+  if (legacy) history.replaceState(null, '', `/places${legacy[1] ?? ''}${location.search}`);
+  return location.pathname;
+}
+
 export function usePath() {
-  const [path, setPath] = useState(location.pathname);
+  const [path, setPath] = useState(currentPath);
   useEffect(() => {
-    const onChange = () => setPath(location.pathname);
+    const onChange = () => setPath(currentPath());
     addEventListener('popstate', onChange);
     return () => removeEventListener('popstate', onChange);
   }, []);

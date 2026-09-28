@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { fakeFetch, fakeNominatim, fakeTransitous, signedInDevice, testApp } from './test-helpers.ts';
 
-const HOME = '1 Lygon St, Carlton';
-const NEW_HOME = '5 Chapel St, Windsor';
+const HOME = '1 Pretend St, Carlton';
+const NEW_HOME = '5 Madeup Rd, Windsor';
 const placeLink = (hex: string, name: string, lat: number, lng: number) =>
   `https://www.google.com/maps/place/${name.replaceAll(' ', '+')}/@${lat},${lng},17z/data=!4m6!3m5!1s0x1:0x${hex}!8m2!3d${lat}!4d${lng}`;
 
 async function setup(transitous: ReturnType<typeof fakeTransitous>, now = () => Date.UTC(2026, 8, 28, 8, 0)) {
-  const ctx = testApp({ fetch: fakeFetch(fakeNominatim({ [HOME]: { lat: -37.7983, lng: 144.9669 }, [NEW_HOME]: { lat: -37.85, lng: 144.99 } }), transitous), now });
+  const ctx = testApp({ fetch: fakeFetch(fakeNominatim({ [HOME]: { lat: -37.79, lng: 144.97 }, [NEW_HOME]: { lat: -37.85, lng: 144.99 } }), transitous), now });
   const alex = await signedInDevice(ctx.app, 'Alex');
   const place = (await (await alex.post('/api/places', { url: placeLink('c1', 'Invented Noodles', -37.8103, 144.9632) })).json()).place;
   await alex.post('/api/places', { url: placeLink('c2', 'Invented Dumplings', -37.82, 144.97) });
@@ -25,7 +25,7 @@ describe('#10 AC1: transit time from home, leaving now', () => {
     expect(await transit()).toEqual({ minutes: 32 }); // 1900 s, rounded
     const [url] = calls;
     expect(url.pathname).toBe('/api/v5/plan');
-    expect(url.searchParams.get('fromPlace')).toBe('-37.7983,144.9669');
+    expect(url.searchParams.get('fromPlace')).toBe('-37.79,144.97');
     expect(url.searchParams.get('toPlace')).toBe('-37.8103,144.9632');
     expect(url.searchParams.get('time')).toBe('2026-09-28T08:00:00.000Z');
     expect(url.searchParams.get('arriveBy')).toBe('false');

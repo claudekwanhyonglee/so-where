@@ -8,12 +8,62 @@ const PIN_WARNING = /light lock.*not real security.*bank or phone PIN/is;
 
 export async function signUp(page: Page, name: string, pin = '1234', path = '/') {
   await page.goto(`${path}${path.includes('?') ? '&' : '?'}invite=${INVITE}`);
+  await signUpHere(page, name, pin);
+}
+
+/** Signs up a new person from the sign-in screen that's already showing. */
+export async function signUpHere(page: Page, name: string, pin = '1234') {
   await page.getByRole('button', { name: /i'm new/i }).click();
-  await expect(page.getByText(PIN_WARNING)).toBeVisible();
   await page.getByLabel('Your name').fill(name);
-  await page.getByLabel('Choose a 4-digit PIN').fill(pin);
-  await page.getByRole('button', { name: /^start$/i }).click();
-  await expect(page.getByText(`Hi, ${name}`)).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText(PIN_WARNING)).toBeVisible();
+  await page.getByLabel('4-digit PIN').fill(pin); // the 4th digit submits
+  await expectSignedIn(page);
+}
+
+/** Signs in an existing person from the sign-in screen that's already showing. */
+export async function signInHere(page: Page, name: string, pin: string) {
+  await page.getByRole('button', { name, exact: true }).click();
+  await page.getByLabel('4-digit PIN').fill(pin);
+}
+
+/** The signed-in app is showing: its nav (the top nav or the bottom tabs, whichever fits the screen) is there. */
+export async function expectSignedIn(page: Page) {
+  await expect(page.getByRole('link', { name: 'You', exact: true })).toBeVisible();
+}
+
+/** Who the desktop top nav says is signed in. */
+export const signedInAs = (page: Page, name: string) => expect(page.getByRole('banner').getByText(name, { exact: true })).toBeVisible();
+
+/** Waits for running animations (cards sliding in, sheets rising) to finish, so boxes can be measured. */
+export const settled = (page: Page) => page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
+
+/** A Google Maps link to an invented place (the e2e server fakes the lookups; its suburb is always "Carlton"). */
+export const placeLink = (name: string, lat = -37.8, lng = 144.96) => {
+  const hex = Math.floor(Math.random() * 1e12).toString(16);
+  return `https://www.google.com/maps/place/${name.replaceAll(' ', '+')}/@${lat},${lng},17z/data=!4m2!3m1!1s0x1:0x${hex}!3d${lat}!4d${lng}`;
+};
+
+/** Adds a place through the API, for tests where adding it isn't the point. */
+export async function addPlaceViaApi(page: Page, name: string, note = '', lat?: number) {
+  const res = await page.request.post('/api/places', { data: { url: placeLink(name, lat), note } });
+  return (await res.json()).place as { id: number; name: string };
+}
+
+/** Makes a named set holding the given places through the API. */
+export async function newSetViaApi(page: Page, name: string, placeIds: number[] = []) {
+  const { id } = await (await page.request.post('/api/sets', { data: { name } })).json();
+  for (const placeId of placeIds) await page.request.put(`/api/sets/${id}/places/${placeId}`);
+  return id as number;
+}
+
+/** From anywhere in the app: choose a set on the Pick home screen and start picking from it. */
+export async function startPicking(page: Page, setName: string) {
+  await page.getByRole('link', { name: 'Pick', exact: true }).click();
+  await page.getByRole('button', { name: /^Pick from/ }).click();
+  await page.getByRole('dialog').getByRole('radio', { name: setName }).click();
+  await page.getByRole('button', { name: 'Start picking' }).click();
+  await expect(page).toHaveURL(/\/s\/[\w-]+$/);
 }
 
 /** A fresh browser (as if another device) with a new person signed in. */
