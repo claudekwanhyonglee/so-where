@@ -10,20 +10,27 @@ import {
   sampleGroup,
   seededRandom,
   type Candidate,
+  type GroupSamples,
   type Pick,
 } from './ranking.ts';
 
-/** Everything a pair chooser may look at when picking the next pair for person `me`. */
-export type GroupChooserInput = { me: number; people: Candidate[][]; picks: Pick[][]; priors: Map<number, number>; rng: () => number };
+/** Everything a pair chooser may look at when picking the next pair for person `me`; `group()` samples once per round. */
+export type GroupChooserInput = { me: number; people: Candidate[][]; group: () => GroupSamples; picks: Pick[][]; priors: Map<number, number>; rng: () => number };
 export type GroupChooser = (input: GroupChooserInput) => [number, number] | null;
 
-/** Today's per-person pair choice. */
-export const perPersonChooser: GroupChooser = ({ me, people, picks, priors, rng }) => {
-  const last = picks[me].at(-1);
-  return choosePair(people[me], rng, last && { pair: [last.a, last.b] }, pendingReask(priors, picks[me]));
+const lastPick = (picks: Pick[]) => {
+  const last = picks.at(-1);
+  return last && { pair: [last.a, last.b] as [number, number] };
 };
 
-export type Check = { round: number; top: number; prettySure: boolean };
+/** Today's per-person pair choice. */
+export const perPersonChooser: GroupChooser = ({ me, people, picks, priors, rng }) => choosePair(people[me], rng, lastPick(picks[me]), pendingReask(priors, picks[me]));
+
+/** Pair choice that looks at the whole group (#26). */
+export const groupChooser: GroupChooser = ({ me, people, group, picks, priors, rng }) =>
+  choosePair(people[me], rng, lastPick(picks[me]), pendingReask(priors, picks[me]), { group: group(), me });
+
+export type Check ={ round: number; top: number; prettySure: boolean };
 
 const normal = (rng: () => number) => Math.sqrt(-2 * Math.log(1 - rng())) * Math.cos(2 * Math.PI * rng());
 
@@ -58,10 +65,20 @@ export function simulateGroup(opts: {
   };
 
   const checks: Check[] = [];
-  for (let round = 1; round <= rounds; round++) {
+  for (let round = 0; ; round++) {
+    // The state after `round` rounds, sampled at most once: shared by the check and the next round's questions.
     const people = taste.map((_, p) => candidatesOf(p));
+    let samples: GroupSamples | undefined;
+    const group = () => (samples ??= sampleGroup(people));
+
+    if (round >= firstCheck && (round - firstCheck) % checkEvery === 0) {
+      const [top] = groupRanking(group()).keys();
+      checks.push({ round, top, prettySure: isPrettySure(confidenceIn(top, group()), picks.map((p) => p.length)) });
+    }
+    if (round === rounds) return { planted, checks };
+
     for (let me = 0; me < size; me++) {
-      const pair = chooser({ me, people, picks, priors, rng });
+      const pair = chooser({ me, people, group, picks, priors, rng });
       if (!pair) continue;
       const [a, b] = pair;
       const prefersA = taste[me][a] > taste[me][b] !== rng() < strayTaps;
@@ -69,11 +86,5 @@ export function simulateGroup(opts: {
       comparisons[me][a]++;
       comparisons[me][b]++;
     }
-    if (round >= firstCheck && (round - firstCheck) % checkEvery === 0) {
-      const group = sampleGroup(taste.map((_, p) => candidatesOf(p)));
-      const [top] = groupRanking(group).keys();
-      checks.push({ round, top, prettySure: isPrettySure(confidenceIn(top, group), picks.map((p) => p.length)) });
-    }
   }
-  return { planted, checks };
 }

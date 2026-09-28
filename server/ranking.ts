@@ -201,10 +201,12 @@ const samePair = (x: [number, number], y?: [number, number]) => !!y && ((x[0] ==
  * 4. Some pairs go to whatever the engine is least sure about, however low its score.
  * 5. A surprising reversal is asked again, so a third answer settles a stray tap versus a real change of mind.
  *    It takes precedence over everything once it's been waiting 4 pairs, so it's always back within 5.
- * 6. Otherwise, draw a plausible score for every place from its rating (Thompson sampling) and compare the
- *    closest-call neighbours near the top of that draw: that settles who's in the top 5, and their order.
+ * 6. With others in the session, the pair whose answer is expected to tell us most about the group's top pick.
+ * 7. Otherwise (alone, or no answer of mine would change the group's pick), draw a plausible score for every
+ *    place from its rating (Thompson sampling) and compare the closest-call neighbours near the top of that
+ *    draw: that settles who's in the top 5, and their order.
  */
-export function choosePair(candidates: Candidate[], rng: () => number, last?: LastPick, reask?: Reask): [number, number] | null {
+export function choosePair(candidates: Candidate[], rng: () => number, last?: LastPick, reask?: Reask, group?: GroupView): [number, number] | null {
   const pool = candidates.filter((c) => !c.vetoed);
   if (pool.length < 2) return null;
 
@@ -247,6 +249,9 @@ export function choosePair(candidates: Candidate[], rng: () => number, last?: La
   }
 
   if (reaskable && reaskable.picksSince >= 1) return reaskable.pair;
+
+  const forTheGroup = group && group.group.samples[0]?.draws.length > 1 ? mostInformativePair(pool, group, last) : null;
+  if (forTheGroup) return forTheGroup;
 
   const drawn = byDraw(pool);
   const neighbours = drawn
@@ -313,6 +318,56 @@ export function confidenceIn(placeId: number, { placeIds, contenders, samples }:
 /** "Pretty sure": confident in the top pick, and everyone has had their say. */
 export const isPrettySure = (confidence: number, picksEach: number[]) => confidence >= PRETTY_SURE && picksEach.every((n) => n >= PRETTY_SURE_MIN_PICKS);
 
+/** The group's samples, and which of its people (by position) the next pair is for. */
+export type GroupView = { group: GroupSamples; me: number };
+
+const entropy = (counts: Int32Array, total: number) => {
+  let h = 0;
+  for (const n of counts) if (n > 0) h -= (n / total) * Math.log(n / total);
+  return h;
+};
+
+/**
+ * The pair (among places this person hasn't vetoed) whose answer is expected to tell us most about which place
+ * is the group's best: in each sample, this person's drawn scores say how they'd answer, so an answer splits
+ * the samples in two, and a good question leaves each half surer of the winner (expected information gain).
+ * A pair everyone's samples agree on (e.g. one this person has settled) splits nothing, so gains nothing.
+ * Null if no pair would tell us anything.
+ */
+function mostInformativePair(pool: Candidate[], { group, me }: GroupView, last?: LastPick): [number, number] | null {
+  const { placeIds, contenders, samples } = group;
+  const position = new Map(placeIds.map((id, i) => [id, i]));
+  const contenderPositions = contenders.map((id) => position.get(id)!);
+  const winners = samples.map((s) => bestPosition(s, contenderPositions));
+  const winnerSlot = new Map([...new Set(winners)].map((w, slot) => [w, slot]));
+  const slots = winners.map((w) => winnerSlot.get(w)!);
+  const before = entropy(Int32Array.from(winnerSlot.keys(), (w) => winners.filter((x) => x === w).length), samples.length);
+
+  let best: { pair: [number, number]; gain: number } | null = null;
+  const ids = pool.map((c) => c.id);
+  const mine = samples.map((s) => s.draws[me]);
+  const [prefersX, prefersY] = [new Int32Array(winnerSlot.size), new Int32Array(winnerSlot.size)];
+  for (let i = 0; i < ids.length; i++)
+    for (let j = i + 1; j < ids.length; j++) {
+      if (samePair([ids[i], ids[j]], last?.pair)) continue;
+      const [x, y] = [position.get(ids[i])!, position.get(ids[j])!];
+      prefersX.fill(0);
+      prefersY.fill(0);
+      let xCount = 0;
+      for (let s = 0; s < mine.length; s++) {
+        if (mine[s][x] > mine[s][y]) (prefersX[slots[s]]++, xCount++);
+        else prefersY[slots[s]]++;
+      }
+      const yCount = samples.length - xCount;
+      const after = (xCount * entropy(prefersX, xCount || 1) + yCount * entropy(prefersY, yCount || 1)) / samples.length;
+      const gain = before - after;
+      if (gain > (best?.gain ?? MIN_GAIN)) best = { pair: [ids[i], ids[j]], gain };
+    }
+  return best?.pair ?? null;
+}
+
+const MIN_GAIN = 1e-3; // nats; below this an answer wouldn't change what we know about the group's pick
+
 /** score: the place's average fair-rule score (its expected value); chance: how likely it is the group's best. */
 export type GroupStanding = { chance: number; score: number; vetoes: number };
 
@@ -341,15 +396,31 @@ export function groupRanking({ placeIds, vetoes, contenders, samples }: GroupSam
  */
 function fairSample(people: Candidate[][], rng: () => number): GroupSample {
   const scores = new Float64Array(people[0].length);
-  const draws = people.map((person) => {
-    const drawn = Float64Array.from(person, (c) => c.rating.mu + c.rating.rd * normal(rng));
-    const kept = person.flatMap((c, i) => (c.vetoed ? [] : [i])).sort((a, b) => drawn[b] - drawn[a]);
-    kept.forEach((i, rank) => {
-      const percentile = kept.length > 1 ? (kept.length - 1 - rank) / (kept.length - 1) : 1;
-      scores[i] += percentile / people.length - (inBottomThird(rank + 1, kept.length) ? 1 : 0);
-    });
-    person.forEach((c, i) => c.vetoed && (scores[i] -= 1));
+  const draws = people.map((person, p) => {
+    const drawn = new Float64Array(person.length);
+    for (let i = 0; i < person.length; i++) drawn[i] = person[i].rating.mu + person[i].rating.rd * normal(rng);
+    const kept = keptPositions(people[p]);
+    // ponytail: rank by counting higher draws, O(n²) per person; faster than sorting for up to ~40 places.
+    for (const i of kept) {
+      let rank = 0;
+      for (const j of kept) if (drawn[j] > drawn[i] || (drawn[j] === drawn[i] && j < i)) rank++;
+      scores[i] += rankPoints(rank, kept.length, people.length);
+    }
+    for (let i = 0; i < person.length; i++) if (person[i].vetoed) scores[i] -= 1;
     return drawn;
   });
   return { draws, scores };
+}
+
+/** The positions of the places a person hasn't vetoed (cached per person). */
+const keptCache = new WeakMap<Candidate[], number[]>();
+function keptPositions(person: Candidate[]) {
+  if (!keptCache.has(person)) keptCache.set(person, person.flatMap((c, i) => (c.vetoed ? [] : [i])));
+  return keptCache.get(person)!;
+}
+
+/** A place's fair-rule points from one person who ranks it `rank` (0 = top) of `count`. */
+function rankPoints(rank: number, count: number, groupSize: number) {
+  const percentile = count > 1 ? (count - 1 - rank) / (count - 1) : 1;
+  return percentile / groupSize - (inBottomThird(rank + 1, count) ? 1 : 0);
 }

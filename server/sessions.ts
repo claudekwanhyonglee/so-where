@@ -5,7 +5,7 @@ import type { AppEnv } from './auth.ts';
 import type { Db } from './db.ts';
 import { leaderboard } from './leaderboard.ts';
 import { getPlace } from './places.ts';
-import { choosePair, DEFAULT_RATING, estimateSession, isUpset, pendingReask, updateHistory, type Candidate, type LastPick, type Pick, type Rating } from './ranking.ts';
+import { choosePair, DEFAULT_RATING, estimateSession, isUpset, pendingReask, sampleGroup, updateHistory, type Candidate, type GroupView, type LastPick, type Pick, type Rating } from './ranking.ts';
 import { ALL_PLACES, parseSetId, setExists, setName, setPlaceIds, type SetId } from './sets.ts';
 import { transitTime } from './transit.ts';
 
@@ -116,9 +116,17 @@ const cardPlace = (db: Db, id: number) => {
   return { id, name, suburb, note, key, lat, lng };
 };
 
+/** Everyone's ratings, sampled, so this person's next question can be the one that matters most to the group. */
+function groupView(db: Db, session: Session, personId: number, mine: Candidate[]): GroupView | undefined {
+  const members = sessionMembers(db, session.id);
+  if (members.length < 2) return undefined;
+  const people = members.map((m) => (m.id === personId ? mine : personState(db, session, m.id).candidates));
+  return { group: sampleGroup(people), me: members.findIndex((m) => m.id === personId) };
+}
+
 function nextPair(db: Db, session: Session, personId: number) {
   const { candidates, last, reask, pickCount } = personState(db, session, personId);
-  const pair = choosePair(candidates, Math.random, last, reask);
+  const pair = choosePair(candidates, Math.random, last, reask, groupView(db, session, personId, candidates));
   return { pair: pair && pair.map((id) => cardPlace(db, id)), picks: pickCount };
 }
 

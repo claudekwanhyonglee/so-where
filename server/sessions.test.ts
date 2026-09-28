@@ -206,6 +206,27 @@ describe('#16 AC4: recent sessions', () => {
   });
 });
 
+describe('#26 AC5: fast enough', () => {
+  it('chooses a pair in under 200 ms for 8 people × 40 places', async () => {
+    const ctx = testApp({ fetch: fakeFetch(fakeNominatim()) });
+    const people = [];
+    for (let i = 0; i < 8; i++) people.push(await signedInDevice(ctx.app, `Person ${i}`));
+    const ids: number[] = [];
+    for (let i = 0; i < 40; i++) ids.push((await (await people[0].post('/api/places', { url: placeLink(`d${i}`, `Invented ${i}`) })).json()).place.id);
+    const id = await start(people[0], 'all');
+    for (const [n, person] of people.entries()) {
+      await person.post(`/api/sessions/${id}/join`);
+      for (let i = 0; i < 20; i++) await person.post(`/api/sessions/${id}/picks`, { a: ids[(i + n) % 40], b: ids[(i * 7 + 3) % 40], winner: ids[(i + n) % 40] });
+    }
+    await nextPair(people[0], id); // warm up
+
+    const started = performance.now();
+    const pair = await nextPair(people[0], id);
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(pair).toHaveLength(2);
+  }, 60_000);
+});
+
 describe('#23 AC3: a surprising reversal comes back within 5 pairs', () => {
   it('is offered again through the API', async () => {
     const { alex, ids, setId } = await setup();

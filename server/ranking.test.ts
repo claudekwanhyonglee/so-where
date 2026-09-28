@@ -445,6 +445,44 @@ describe('#24 AC6: fast enough', () => {
   });
 });
 
+// ---------------------------------------------------------------------------------------------
+// #26: questions that matter to the group
+
+/** A person's candidates from [mu, rd] per place id. */
+const personWith = (ratings: [number, number][]): Candidate[] => ratings.map(([mu, rd], id) => ({ id, rating: { mu, rd }, comparisons: 10 }));
+const isPair = (pair: [number, number] | null, x: number, y: number) => !!pair && [x, y].every((id) => pair.includes(id));
+
+describe('#26 AC1: each person gets the question that most changes the group\'s top pick', () => {
+  it("asks about the pair that decides the group's pick, not this person's own close call", () => {
+    // Me: my own top two (2, 3) are a close, uncertain call; I'm unsure about 0 vs 1 further down.
+    const me = personWith([[1600, 250], [1600, 250], [1900, 60], [1880, 200], [1400, 60], [1300, 60], [1200, 60], [1100, 60]]);
+    // The other person loves 0 and 1 about equally, and has 2 and 3 in their bottom third: those can't win.
+    const other = personWith([[1900, 60], [1880, 60], [1000, 60], [900, 60], [1700, 60], [1600, 60], [1500, 60], [1400, 60]]);
+    const group = sampleGroup([me, other]);
+
+    const asked = SEEDS.map((seed) => choosePair(me, seededRandom(seed), undefined, undefined, { group, me: 0 }));
+    expect(share(asked.map((pair) => isPair(pair, 0, 1)))).toBeGreaterThanOrEqual(0.8);
+  });
+});
+
+describe('#26 AC2: a pair this person has settled is not asked while another would tell the group more', () => {
+  it('skips my settled 0 vs 1, even though it decides the group pick for someone else', () => {
+    const me = personWith([[1800, 60], [1400, 60], [1700, 250], [1650, 250], [1300, 60], [1200, 60]]);
+    const other = personWith([[1800, 250], [1800, 250], [1500, 60], [1450, 60], [1000, 60], [900, 60]]);
+    const group = sampleGroup([me, other]);
+    const asked = SEEDS.map((seed) => choosePair(me, seededRandom(seed), undefined, undefined, { group, me: 0 }));
+    expect(share(asked.map((pair) => isPair(pair, 0, 1)))).toBeLessThan(0.1);
+  });
+});
+
+describe('#26 AC4: alone in a session', () => {
+  it('questions are exactly as before, so the #7 simulations (top 5 within 120 picks) still describe it', () => {
+    const me = personWith([[1600, 250], [1600, 250], [1900, 60], [1880, 200], [1400, 60], [1300, 60], [1200, 60], [1100, 60]]);
+    const group = sampleGroup([me]);
+    for (const seed of SEEDS) expect(choosePair(me, seededRandom(seed), undefined, undefined, { group, me: 0 })).toEqual(choosePair(me, seededRandom(seed)));
+  });
+});
+
 describe('#23 AC4: older picks do not lower certainty', () => {
   it("a place's rd does not grow as unrelated picks pile up after its own", () => {
     const priors = new Map([0, 1, 2, 3, 4, 5].map((id) => [id, 1500]));
