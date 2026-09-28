@@ -94,7 +94,7 @@ function PersonButton({ icon, children, onClick }: { icon: ReactNode; children: 
   return (
     <button onClick={onClick} className="group flex flex-col items-center gap-2 rounded-[20px] py-1.5 font-bold [&>span:first-child]:group-hover:-translate-y-0.5 [&>span:first-child]:group-hover:-rotate-2">
       {icon}
-      <span className="max-w-full truncate">{children}</span>
+      <span className="max-w-full text-center leading-tight break-words">{children}</span>
     </button>
   );
 }

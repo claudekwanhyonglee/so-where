@@ -35,6 +35,9 @@ export async function expectSignedIn(page: Page) {
 /** Who the desktop top nav says is signed in. */
 export const signedInAs = (page: Page, name: string) => expect(page.getByRole('banner').getByText(name, { exact: true })).toBeVisible();
 
+/** Waits for running animations (cards sliding in, sheets rising) to finish, so boxes can be measured. */
+export const settled = (page: Page) => page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
+
 /** A Google Maps link to an invented place (the e2e server fakes the lookups; its suburb is always "Carlton"). */
 export const placeLink = (name: string, lat = -37.8, lng = 144.96) => {
   const hex = Math.floor(Math.random() * 1e12).toString(16);

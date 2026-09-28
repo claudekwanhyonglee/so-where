@@ -49,7 +49,7 @@ function Page({ path, me, refresh }: { path: string; me: Me; refresh: () => void
   const setId = path.match(/^\/sets\/([^/]+)$/)?.[1];
   if (setId) return <SetPage key={setId} id={setId} />;
   const sessionId = path.match(/^\/s\/([\w-]+)$/)?.[1];
-  if (sessionId) return <SessionPage key={sessionId} id={sessionId} />;
+  if (sessionId) return <SessionPage key={sessionId} id={sessionId} meId={me.id} />;
   return <Home me={me} />;
 }
 

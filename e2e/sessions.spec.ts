@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { signUp, signUpHere, startPicking, uniqueName } from './helpers.ts';
+import { settled, signUp, signUpHere, startPicking, uniqueName } from './helpers.ts';
 
 async function addPlace(page: Page, name: string, note = '') {
   const hex = Math.floor(Math.random() * 1e12).toString(16);
@@ -32,7 +32,7 @@ test('#8 AC1: a friend opens the share link and joins', async ({ page, browser }
   const places = [uniqueName('Invented Pho '), uniqueName('Invented Pizza ')];
   await startSession(page, places);
 
-  await page.getByRole('button', { name: /share/i }).click();
+  await page.getByRole('button', { name: /share/i }).first().click(); // the header's; the solo banner has one too
   const link = await page.getByLabel('Share link').inputValue();
   expect(link).toMatch(/\/s\/[\w-]+\?invite=/);
 
@@ -78,6 +78,7 @@ test('#8 AC6: cards stack on a phone and sit side by side on a desktop', async (
   await expect(page.getByText('Try the special')).toBeVisible(); // #8 AC3: the note, when there is one
 
   const [first, second] = [cards(page).nth(0), cards(page).nth(1)];
+  await settled(page); // the cards slide in
   let [a, b] = [(await first.boundingBox())!, (await second.boundingBox())!];
   expect(b.y).toBeGreaterThanOrEqual(a.y + a.height - 1); // stacked
   expect(a.x + a.width).toBeLessThanOrEqual(390);

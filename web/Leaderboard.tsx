@@ -1,21 +1,11 @@
-import { useCallback } from 'react';
-import { api } from './api.ts';
 import { Card } from './ui.tsx';
-import { usePolling } from './usePolling.ts';
 
-type Board = {
+export type Board = {
   people: { id: number; name: string; picks: number; ranking: { placeId: number; name: string; vetoed: boolean }[] }[];
   combined: { placeId: number; name: string; suburb: string | null; positions: Record<string, number>; bottomThirdFor: number[]; vetoedBy: number[] }[];
 };
 
-const POLL_MS = 2000;
-
-/** `version` changes whenever this device picks, so the board refreshes straight away too. */
-export function Leaderboard({ sessionId, version }: { sessionId: string; version: number }) {
-  const board = usePolling(
-    useCallback(() => api<Board>(`/sessions/${sessionId}/leaderboard?v=${version}`), [sessionId, version]),
-    POLL_MS,
-  );
+export function Leaderboard({ board }: { board: Board | null }) {
   if (!board) return null;
 
   return (

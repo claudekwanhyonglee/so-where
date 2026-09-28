@@ -54,7 +54,7 @@ function StartCard() {
         Start picking <ChevronRight size={18} aria-hidden="true" />
       </Button>
       {start.error && <Notice tone="error">{start.error}</Notice>}
-      <span className="relative text-[13px] opacity-85">You'll get a link so everyone picks on their own phone.</span>
+      <span className="relative max-w-[calc(100%-110px)] text-[13px] opacity-85">You'll get a link so everyone picks on their own phone.</span>
       {choosing && (
         <SetChooser
           sets={sets}
