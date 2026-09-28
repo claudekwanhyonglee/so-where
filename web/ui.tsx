@@ -1,4 +1,4 @@
-import { Lock, X } from 'lucide-react';
+import { Lock, MapPin, X } from 'lucide-react';
 import {
   useEffect,
   useId,
@@ -226,7 +226,17 @@ export function Avatar({ person, size = 'sm' }: { person: { id: number; name: st
   );
 }
 
-export const Avatars = ({ people }: { people: { id: number; name: string }[] }) => (
+/** A set's square: "All places" gets a pin, a named set its initial on its own colour. */
+export function SetTile({ set, className = 'size-[42px] rounded-[14px] text-xl' }: { set: { id: number | 'all'; name: string }; className?: string }) {
+  const { bg, fg } = set.id === 'all' ? { bg: 'var(--color-ink)', fg: 'var(--color-mustard)' } : swatch(set.id + 1);
+  return (
+    <span aria-hidden="true" style={{ background: bg, color: fg }} className={`grid flex-none place-items-center font-display ${className}`}>
+      {set.id === 'all' ? <MapPin size={18} /> : set.name[0]?.toUpperCase()}
+    </span>
+  );
+}
+
+export const Avatars =({ people }: { people: { id: number; name: string }[] }) => (
   <span className="flex [&>*+*]:-ml-2">
     {people.map((p) => (
       <Avatar key={p.id} person={p} />

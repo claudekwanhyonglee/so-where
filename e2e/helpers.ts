@@ -35,6 +35,27 @@ export async function expectSignedIn(page: Page) {
 /** Who the desktop top nav says is signed in. */
 export const signedInAs = (page: Page, name: string) => expect(page.getByRole('banner').getByText(name, { exact: true })).toBeVisible();
 
+/** A Google Maps link to an invented place (the e2e server fakes the lookups; its suburb is always "Carlton"). */
+export const placeLink = (name: string, lat = -37.8, lng = 144.96) => {
+  const hex = Math.floor(Math.random() * 1e12).toString(16);
+  return `https://www.google.com/maps/place/${name.replaceAll(' ', '+')}/@${lat},${lng},17z/data=!4m2!3m1!1s0x1:0x${hex}!3d${lat}!4d${lng}`;
+};
+
+/** Adds a place through the API, for tests where adding it isn't the point. */
+export async function addPlaceViaApi(page: Page, name: string, note = '') {
+  const res = await page.request.post('/api/places', { data: { url: placeLink(name), note } });
+  return (await res.json()).place as { id: number; name: string };
+}
+
+/** From anywhere in the app: choose a set on the Pick home screen and start picking from it. */
+export async function startPicking(page: Page, setName: string) {
+  await page.getByRole('link', { name: 'Pick', exact: true }).click();
+  await page.getByRole('button', { name: /^Pick from/ }).click();
+  await page.getByRole('dialog').getByRole('radio', { name: setName }).click();
+  await page.getByRole('button', { name: 'Start picking' }).click();
+  await expect(page).toHaveURL(/\/s\/[\w-]+$/);
+}
+
 /** A fresh browser (as if another device) with a new person signed in. */
 export async function newPerson(browser: Browser, prefix: string, path = '/') {
   const context = await browser.newContext();

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { newPerson, uniqueName } from './helpers.ts';
+import { newPerson, startPicking, uniqueName } from './helpers.ts';
 
 test('#9 AC1–AC5: the leaderboard updates live across devices', async ({ browser }) => {
   // Host sets up two places and starts a session for "All places" — but with a fresh set so it stays small.
@@ -18,10 +18,7 @@ test('#9 AC1–AC5: the leaderboard updates live across devices', async ({ brows
   await h.getByLabel('New set name').fill(setName);
   await h.getByRole('button', { name: /create set/i }).click();
   for (const name of places) await h.getByRole('checkbox', { name }).check();
-  await h.getByRole('link', { name: 'Pick', exact: true }).click();
-  await h.getByLabel('Set').selectOption({ label: setName });
-  await h.getByRole('button', { name: /start picking/i }).click();
-  await expect(h).toHaveURL(/\/s\/[\w-]+$/);
+  await startPicking(h, setName);
   const sessionPath = new URL(h.url()).pathname;
 
   // A friend joins on another device.

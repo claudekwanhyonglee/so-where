@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { signUp, signUpHere, uniqueName } from './helpers.ts';
+import { signUp, signUpHere, startPicking, uniqueName } from './helpers.ts';
 
 async function addPlace(page: Page, name: string, note = '') {
   const hex = Math.floor(Math.random() * 1e12).toString(16);
@@ -21,10 +21,7 @@ async function startSession(page: Page, places: string[]) {
   await page.getByRole('button', { name: /create set/i }).click();
   for (const name of places) await page.getByRole('checkbox', { name }).check();
 
-  await page.getByRole('link', { name: 'Pick', exact: true }).click();
-  await page.getByLabel('Set').selectOption({ label: setName });
-  await page.getByRole('button', { name: /start picking/i }).click();
-  await expect(page).toHaveURL(/\/s\/[\w-]+$/);
+  await startPicking(page, setName);
   await expect(page.getByRole('heading', { name: setName })).toBeVisible();
   return page.url();
 }

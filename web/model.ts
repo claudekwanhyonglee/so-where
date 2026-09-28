@@ -20,6 +20,15 @@ const SWATCH = [
 
 export const swatch = (id: number) => SWATCH[Math.abs(id) % SWATCH.length];
 
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** "Today", "Yesterday" or "N days ago", by calendar day. */
+export function relativeDay(then: number, now = Date.now()) {
+  const startOfDay = (t: number) => new Date(t).setHours(0, 0, 0, 0);
+  const days = Math.round((startOfDay(now) - startOfDay(then)) / 86_400_000); // rounding absorbs DST's 23/25-hour days
+  return days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : `${days} days ago`;
+}
+
 export const googleMapsUrl = (place: Pick<Place, 'key'>) => `https://maps.google.com/?cid=${place.key}`;
 
 export const transitDirectionsUrl = (place: Pick<Place, 'lat' | 'lng' | 'name'>) => {

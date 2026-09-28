@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { newPerson, uniqueName } from './helpers.ts';
+import { newPerson, startPicking, uniqueName } from './helpers.ts';
 
 // The e2e server fakes Transitous: every trip takes 25 minutes.
 test('#10 AC1 + AC2: cards show transit time from home, or a Directions link without one', async ({ browser }) => {
@@ -19,9 +19,7 @@ test('#10 AC1 + AC2: cards show transit time from home, or a Directions link wit
   for (const name of places) await page.getByRole('checkbox', { name }).check();
 
   // No home yet: Directions links in transit mode.
-  await page.getByRole('link', { name: 'Pick', exact: true }).click();
-  await page.getByLabel('Set').selectOption({ label: setName });
-  await page.getByRole('button', { name: /start picking/i }).click();
+  await startPicking(page, setName);
   const directions = page.getByRole('article').first().getByRole('link', { name: /directions/i });
   await expect(directions).toHaveAttribute('href', /maps\/dir\/\?api=1&destination=-37\.81,144\.96&travelmode=transit/);
   const sessionUrl = page.url();

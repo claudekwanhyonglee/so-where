@@ -172,3 +172,36 @@ describe('#8 AC5: "Absolutely not"', () => {
     expect(await nextPair(alex, id)).toHaveLength(2);
   });
 });
+
+describe('#16 AC4: recent sessions', () => {
+  it("list each session's current #1 from the combined ranking, and its members", async () => {
+    const { alex, jo, ids, setId } = await setup();
+    const id = await start(alex, setId);
+    await jo.post(`/api/sessions/${id}/join`);
+    // Both prefer the third place over the others.
+    for (const d of [alex, jo]) {
+      for (const other of [ids[0], ids[1]]) await d.post(`/api/sessions/${id}/picks`, { a: ids[2], b: other, winner: ids[2] });
+    }
+
+    const [recent] = await (await alex.get('/api/sessions')).json();
+    expect(recent).toMatchObject({ id, setName: 'Date night', topPick: 'Invented C', memberCount: 2 });
+    expect(recent.members.map((m: { name: string }) => m.name)).toEqual(['Alex', 'Jo']);
+  });
+
+  it('never name a place someone ruled out as the top pick', async () => {
+    const { alex, ids, setId } = await setup();
+    const id = await start(alex, setId);
+    await alex.post(`/api/sessions/${id}/picks`, { a: ids[2], b: ids[0], winner: ids[2] });
+    await alex.post(`/api/sessions/${id}/vetoes`, { placeId: ids[2] });
+    const [recent] = await (await alex.get('/api/sessions')).json();
+    expect(recent.topPick).toMatch(/^Invented [AB]$/);
+  });
+
+  it('have no top pick when the set is empty', async () => {
+    const { alex } = await setup();
+    const emptySet = (await (await alex.post('/api/sets', { name: 'Empty' })).json()).id;
+    await start(alex, emptySet);
+    const [recent] = await (await alex.get('/api/sessions')).json();
+    expect(recent.topPick).toBeNull();
+  });
+});
