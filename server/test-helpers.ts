@@ -31,6 +31,16 @@ export function fakeNominatim(places: Record<string, { lat: number; lng: number 
   };
 }
 
+/** Fake Transitous: answers every trip with itineraries of the given durations (seconds), or with `status` if set. */
+export function fakeTransitous(durations: number[], opts: { status?: number; calls?: URL[] } = {}): Route {
+  return (url) => {
+    if (url.hostname !== 'api.transitous.org') return;
+    opts.calls?.push(url);
+    if (opts.status) return new Response('unavailable', { status: opts.status });
+    return json({ itineraries: durations.map((duration) => ({ duration, legs: [] })), direct: [] });
+  };
+}
+
 export function testApp(opts: { fetch?: typeof fetch; now?: () => number; config?: Partial<Config> } = {}) {
   const db = openDb(':memory:');
   const config: Config = {

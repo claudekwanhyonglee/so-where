@@ -5,12 +5,15 @@ import { join } from 'node:path';
 import { serve } from '@hono/node-server';
 import { createApp } from '../server/app.ts';
 import { openDb } from '../server/db.ts';
-import { fakeFetch, fakeNominatim } from '../server/test-helpers.ts';
+import { fakeFetch, fakeNominatim, fakeTransitous } from '../server/test-helpers.ts';
 import { INVITE } from './helpers.ts';
 
 const db = openDb(join(mkdtempSync(join(tmpdir(), 'so-where-e2e-')), 'e2e.db'));
 
-const externals = fakeFetch(fakeNominatim({ '1 Lygon St, Carlton': { lat: -37.7983, lng: 144.9669 } }));
+const externals = fakeFetch(
+  fakeNominatim({ '1 Lygon St, Carlton': { lat: -37.7983, lng: 144.9669 } }),
+  fakeTransitous([1500]), // every trip: 25 minutes
+);
 
 const app = createApp({
   db,

@@ -7,6 +7,7 @@ import { leaderboard } from './leaderboard.ts';
 import { getPlace } from './places.ts';
 import { choosePair, DEFAULT_RATING, estimateSession, isUpset, updateHistory, type Candidate, type LastPick, type Pick, type Rating } from './ranking.ts';
 import { ALL_PLACES, parseSetId, setExists, setName, setPlaceIds, type SetId } from './sets.ts';
+import { transitTime } from './transit.ts';
 
 export type Session = { id: string; set_id: number | null; created_by: number; created_at: number };
 
@@ -123,7 +124,7 @@ function nextPair(db: Db, session: Session, personId: number) {
   return { pair: pair && pair.map((id) => cardPlace(db, id)), picks: pickCount };
 }
 
-export function sessionsRoutes({ db, config, now }: Deps) {
+export function sessionsRoutes({ db, config, now, fetch }: Deps) {
   const api = new Hono<AppEnv>();
 
   /** Resolves :id to a session the current person has joined (opening a session joins it). */
@@ -174,6 +175,14 @@ export function sessionsRoutes({ db, config, now }: Deps) {
   api.get('/:id/pair', (c) => {
     const session = withSession(c);
     return session ? c.json(nextPair(db, session, c.var.person.id)) : notFound(c);
+  });
+
+  api.get('/:id/transit', async (c) => {
+    const session = withSession(c);
+    if (!session) return notFound(c);
+    const place = getPlace(db, Number(c.req.query('place')));
+    if (!place) return c.json({ error: 'No such place.' }, 404);
+    return c.json(await transitTime({ db, fetch, now }, session, c.var.person, place));
   });
 
   api.get('/:id/leaderboard', (c) => {

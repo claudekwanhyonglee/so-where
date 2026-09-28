@@ -96,6 +96,18 @@ export const migrations: string[] = [
      comparisons INTEGER NOT NULL DEFAULT 0,
      PRIMARY KEY (person_id, place_id)
    );`,
+
+  // Public transport time per person and place for a session, from where home was when it was looked up.
+  // minutes is NULL when Transitous found no trip.
+  `CREATE TABLE transit_times (
+     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+     person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+     place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+     from_lat REAL NOT NULL,
+     from_lng REAL NOT NULL,
+     minutes INTEGER,
+     PRIMARY KEY (session_id, person_id, place_id)
+   );`,
 ];
 
 export function migrate(db: Db, steps: string[] = migrations) {
