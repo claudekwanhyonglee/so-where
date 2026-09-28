@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "start": "node server/index.ts",
+    "start": "node --env-file-if-exists=.env server/index.ts",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

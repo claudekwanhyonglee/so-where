@@ -1,9 +1,10 @@
+# Builds from source. To run the published image instead, see the README.
 services:
   so-where:
     build: .
     env_file: .env
     ports:
-      - "${PORT:-3000}:3000"
+      - "3000:3000"
     volumes:
       - so-where-data:/data
     restart: unless-stopped
