@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError } from './api.ts';
 import { Places } from './Places.tsx';
 import { Profile } from './Profile.tsx';
+import { SetPage, Sets } from './Sets.tsx';
 import { Link, usePath } from './router.tsx';
 import { SignIn } from './SignIn.tsx';
 
@@ -36,12 +37,16 @@ export function App() {
 function Page({ path, me, refresh }: { path: string; me: Me; refresh: () => void }) {
   if (path === '/you') return <Profile me={me} onChanged={refresh} onSignedOut={refresh} />;
   if (path === '/places') return <Places />;
+  if (path === '/sets') return <Sets />;
+  const setId = path.match(/^\/sets\/([^/]+)$/)?.[1];
+  if (setId) return <SetPage key={setId} id={setId} />;
   return <Home me={me} />;
 }
 
 const NAV = [
   { to: '/', label: 'Pick' },
   { to: '/places', label: 'Places' },
+  { to: '/sets', label: 'Sets' },
   { to: '/you', label: 'You' },
 ];
 
