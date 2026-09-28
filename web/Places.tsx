@@ -1,0 +1,124 @@
+import { useCallback, useEffect, useState } from 'react';
+import { api } from './api.ts';
+import { googleMapsUrl, type Place } from './model.ts';
+import { Button, Card, Field, Notice, Section, useSubmit } from './ui.tsx';
+
+export function usePlaces() {
+  const [places, setPlaces] = useState<Place[]>([]);
+  const reload = useCallback(() => api<Place[]>('/places').then(setPlaces), []);
+  useEffect(() => void reload(), [reload]);
+  return { places, reload };
+}
+
+export function Places() {
+  const { places, reload } = usePlaces();
+  return (
+    <div className="flex flex-col gap-4">
+      <AddPlace onAdded={reload} />
+      <PlaceList places={places} onChanged={reload} />
+    </div>
+  );
+}
+
+function AddPlace({ onAdded }: { onAdded: () => void }) {
+  const [url, setUrl] = useState('');
+  const [note, setNote] = useState('');
+  const [message, setMessage] = useState('');
+  const { submit, error, busy } = useSubmit(async () => {
+    setMessage('');
+    const res = await api<{ place: Place; existing?: boolean; message?: string }>('/places', { body: { url, note } });
+    setMessage(res.message ?? `Added ${res.place.name}.`);
+    setUrl('');
+    setNote('');
+    onAdded();
+  });
+  return (
+    <Section title="Add a place">
+      <form onSubmit={submit} className="flex flex-col gap-3">
+        <Field
+          label="Google Maps link"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          required
+          inputMode="url"
+          placeholder="https://maps.app.goo.gl/…"
+          hint="In Google Maps, open the restaurant, tap Share, and paste the link here."
+        />
+        <Field label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Get the dumplings" />
+        {error && <Notice tone="error">{error}</Notice>}
+        {message && <Notice tone="ok">{message}</Notice>}
+        <Button type="submit" disabled={busy}>
+          {busy ? 'Adding…' : 'Add place'}
+        </Button>
+      </form>
+    </Section>
+  );
+}
+
+function PlaceList({ places, onChanged }: { places: Place[]; onChanged: () => void }) {
+  if (places.length === 0) {
+    return <Card className="text-center text-stone-500">No places yet. Paste a Google Maps link above to add the first one.</Card>;
+  }
+  return (
+    <section aria-label="All places">
+      <h2 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-stone-500">{places.length} places</h2>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {places.map((p) => (
+          <PlaceItem key={p.id} place={p} onChanged={onChanged} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function PlaceItem({ place, onChanged }: { place: Place; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [note, setNote] = useState(place.note);
+  const save = useSubmit(async () => {
+    await api(`/places/${place.id}`, { method: 'PATCH', body: { note } });
+    setEditing(false);
+    onChanged();
+  });
+  const remove = async () => {
+    if (!confirm(`Delete ${place.name} for everyone?`)) return;
+    await api(`/places/${place.id}`, { method: 'DELETE' });
+    onChanged();
+  };
+
+  return (
+    <li className="flex flex-col gap-2 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-stone-200">
+      <div>
+        <h3 className="font-bold leading-tight">{place.name}</h3>
+        <p className="text-sm text-stone-500">{place.suburb ?? 'Suburb unknown'}</p>
+      </div>
+      {editing ? (
+        <form onSubmit={save.submit} className="flex flex-col gap-2">
+          <Field label="Note" value={note} onChange={(e) => setNote(e.target.value)} autoFocus />
+          <div className="flex gap-2">
+            <Button type="submit" disabled={save.busy}>
+              Save
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        place.note && <p className="text-sm italic text-stone-700">“{place.note}”</p>
+      )}
+      <div className="mt-auto flex flex-wrap gap-1 pt-1">
+        <a href={googleMapsUrl(place)} target="_blank" rel="noreferrer" className="rounded-lg px-2 py-1 text-sm font-semibold text-orange-700 hover:bg-orange-50">
+          Open in Google Maps ↗
+        </a>
+        {!editing && (
+          <Button variant="ghost" className="!px-2 !py-1" onClick={() => setEditing(true)}>
+            Edit note
+          </Button>
+        )}
+        <Button variant="danger" className="!px-2 !py-1" onClick={remove}>
+          Delete
+        </Button>
+      </div>
+    </li>
+  );
+}

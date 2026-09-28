@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError } from './api.ts';
+import { Places } from './Places.tsx';
 import { Profile } from './Profile.tsx';
 import { Link, usePath } from './router.tsx';
 import { SignIn } from './SignIn.tsx';
@@ -27,13 +28,20 @@ export function App() {
 
   return (
     <Shell me={me}>
-      {path === '/you' ? <Profile me={me} onChanged={refresh} onSignedOut={refresh} /> : <Home me={me} />}
+      <Page path={path} me={me} refresh={refresh} />
     </Shell>
   );
 }
 
+function Page({ path, me, refresh }: { path: string; me: Me; refresh: () => void }) {
+  if (path === '/you') return <Profile me={me} onChanged={refresh} onSignedOut={refresh} />;
+  if (path === '/places') return <Places />;
+  return <Home me={me} />;
+}
+
 const NAV = [
   { to: '/', label: 'Pick' },
+  { to: '/places', label: 'Places' },
   { to: '/you', label: 'You' },
 ];
 

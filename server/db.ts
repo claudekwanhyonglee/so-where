@@ -22,6 +22,17 @@ export const migrations: string[] = [
      created_at INTEGER NOT NULL
    );
    CREATE TABLE geocode_cache (key TEXT PRIMARY KEY, result TEXT NOT NULL);`,
+
+  `CREATE TABLE places (
+     id INTEGER PRIMARY KEY,
+     key TEXT NOT NULL UNIQUE,
+     name TEXT NOT NULL,
+     lat REAL,
+     lng REAL,
+     suburb TEXT,
+     note TEXT NOT NULL DEFAULT '',
+     created_at INTEGER NOT NULL
+   );`,
 ];
 
 export function migrate(db: Db, steps: string[] = migrations) {

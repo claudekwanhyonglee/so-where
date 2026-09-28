@@ -1,8 +1,9 @@
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
-import { authRoutes, inviteGate } from './auth.ts';
+import { authRoutes, inviteGate, requirePerson, type AppEnv } from './auth.ts';
 import type { Db } from './db.ts';
 import { createNominatim } from './nominatim.ts';
+import { placesRoutes } from './places.ts';
 
 export type Config = {
   webRoot: string;
@@ -22,12 +23,14 @@ export type Deps = {
 export function createApp(deps: Deps) {
   const { db, config } = deps;
   const nominatim = createNominatim(db, deps.fetch, config.geocodeIntervalMs);
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
 
   app.get('/health', (c) => c.json({ ok: true }));
   app.use('*', inviteGate(config.inviteCode));
 
   app.route('/api', authRoutes(deps, nominatim));
+  app.use('/api/*', requirePerson(db));
+  app.route('/api/places', placesRoutes(deps, nominatim));
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 
   app.use('/*', serveStatic({ root: config.webRoot }));
