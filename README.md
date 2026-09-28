@@ -1,17 +1,12 @@
-# so-where
+<h1 align="center">So Where?</h1>
 
-"Where should we eat?" "You decide." — so-where settles it. Everyone ranks your shared restaurant list with quick
-this-or-that picks on their own phone or laptop, and a live leaderboard shows each person's ranking and a combined one.
+<p align="center">Rank your restaurant list together, one this-or-that pick at a time.</p>
 
-Self-hosted, one group per instance, no accounts, no paid services, no API keys.
-
-- Add restaurants by pasting a Google Maps link, or import your saved lists from Google Takeout.
-- Group them into sets ("Date night"), start a session, share the link, and pick.
-- Each card shows your public transport time from home (via [Transitous](https://transitous.org)).
+"Where should we eat?" "You decide." Open it on your own phone, tap whichever of two places you'd rather go to, and a live leaderboard shows everyone's ranking and a combined one. You make the final call; it just makes the call easy.
 
 ## Run it
 
-You need Docker. Put these two files in a folder:
+It's self-hosted: one small Docker container for your group, with no accounts, no paid services and no API keys. Put these two files in a folder:
 
 `docker-compose.yml`
 
@@ -39,59 +34,51 @@ INVITE_CODE=pick-something-long-and-random
 PIN_PEPPER=paste-the-output-of-openssl-rand-hex-32
 ```
 
-Then:
+Then run `docker compose up -d`, open `http://localhost:3000/?invite=<INVITE_CODE>` and share that link with your group. To update: `docker compose pull && docker compose up -d`.
 
-```sh
-docker compose up -d
-```
+Your data lives in the `so-where-data` volume. [`.env.example`](.env.example) lists every setting.
 
-Open `http://localhost:3000/?invite=<INVITE_CODE>` and share that link with your group. Each person picks a name and
-a 4-digit PIN, and can then sign in on any other device by choosing their name.
+## About this project
 
-The SQLite database lives in the `so-where-data` volume and is migrated automatically on start. `GET /health` returns
-200 when the app is up. To update: `docker compose pull && docker compose up -d`.
+So Where? is a personal project built almost entirely by AI agents. I decided on the design, feel, and features, and the agents wrote the tests and code with full autonomy over the technical decisions. So treat it as you would any hobby project, not audited software.
 
-## Configuration
+## Picking
 
-All settings are environment variables; see [`.env.example`](.env.example) for the full list. The app won't start
-without `INVITE_CODE` and `PIN_PEPPER`.
+- **This or that.** Two places side by side (stacked on a phone). Tap the one you'd rather, or *Too close to call*.
+- **Smart pairs.** It hunts for your top 5 rather than ordering the whole list, while still giving every place a fair look, so a good one can't get stuck at the bottom unseen.
+- **Cravings count.** Your rankings carry over between sessions, but each new session starts loose, so tonight's mood moves things fast.
+- **Absolutely not.** Rule a place out for tonight. It gets a stamp everyone can see, and it's back next time.
+- **Live leaderboard.** Everyone's ranking, plus a combined one that flags places in someone's bottom third.
+- **Getting there.** Each card shows your public transport time from home, leaving now (via [Transitous](https://transitous.org)), and opens in Google Maps.
 
-## About the PINs
+## Places
 
-The PIN is a **light lock** to keep friends out of each other's rankings, not real security. It's rate limited
-(5 wrong tries lock that name for 15 minutes) and stored as a scrypt hash mixed with `PIN_PEPPER`, so the database on
-its own is useless. But whoever has both the database and `.env` could recover a 4-digit PIN. Don't reuse a bank or
-phone PIN.
+- **Paste a link.** Share a place from Google Maps and paste the link, short or full.
+- **Import from Google Takeout.** Upload your saved lists (CSVs) and starred places (`Saved Places.json`). Each list becomes a set, and re-importing only adds what's new.
+- **Sets.** Group places into sets like *Date night*. *All places* always has everything.
 
-Forgot your PIN? Change it from any device you're still signed in on, or ask the server owner to run:
+## Names and PINs
 
-```sh
-docker compose exec so-where reset-pin <name>
-```
+Everyone picks a name and a 4-digit PIN, then signs in on any other device by choosing their name. The PIN is a light lock to keep friends out of each other's rankings, not real security: whoever has both the database and `.env` could recover it. Don't reuse a bank or phone PIN.
 
-It prints a new PIN and lifts any lockout.
+Forgot it? Change it from a device you're still signed in on, or have the server owner run `docker compose exec so-where reset-pin <name>`.
 
 ## Development
 
-Node 24 or newer (the server runs TypeScript directly).
+Needs Node.js 24.
 
 ```sh
-npm install
+npm ci
 npx playwright install chromium   # once, for the browser tests
 cp .env.example .env              # and fill it in
-npm run build && npm start        # API + built frontend on :3000
-npm run dev                       # Vite dev server with hot reload, proxying /api to :3000
+npm run build && npm start        # the app on :3000
+npm run dev                       # hot reload, proxying /api to :3000
+npm test                          # unit + API tests (Vitest)
+npm run test:e2e                  # browser tests (Playwright)
 ```
 
-`docker compose up --build` with the repo's own `docker-compose.yml` builds the image from source.
+Tests never call real external services. `docker compose up --build` with the repo's own `docker-compose.yml` builds the image from source, and pushing a `v*` tag publishes it to ghcr.io.
 
-## Tests
+## License
 
-```sh
-npm test            # unit + API tests (Vitest)
-npm run test:e2e    # builds the frontend, then runs the browser tests (Playwright)
-npm run typecheck
-```
-
-Tests never call real external services; they are faked. CI runs all three on every push and pull request, and
-pushing a `v*` tag publishes the image to `ghcr.io`.
+[MIT](LICENSE)
