@@ -38,7 +38,7 @@ test('#3 AC6 + AC7 + AC8 + AC9: profile — home address, PIN change with warnin
   await home.getByRole('button', { name: /save address/i }).click();
   await expect(home.getByText(/couldn.t find that address/i)).toBeVisible();
 
-  await home.getByLabel('Address').fill('1 Lygon St, Carlton');
+  await home.getByLabel('Address').fill('1 Pretend St, Carlton');
   await home.getByRole('button', { name: /save address/i }).click();
   await expect(page.getByText(/home saved/i)).toBeVisible();
 

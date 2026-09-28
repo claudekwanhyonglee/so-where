@@ -42,7 +42,7 @@ test('#17 AC1: cards show name, suburb, note, Maps link and directions; a place 
 
 test('#17 AC1: with a home address the card shows transit minutes instead of directions', async ({ page }) => {
   await signUp(page, uniqueName('Homebody'));
-  await page.request.put('/api/me/home', { data: { address: '1 Lygon St, Carlton' } });
+  await page.request.put('/api/me/home', { data: { address: '1 Pretend St, Carlton' } });
   await openSession(page, 2);
   for (const card of await cards(page).all()) {
     await expect(card).toContainText('25 min');

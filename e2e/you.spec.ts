@@ -17,11 +17,11 @@ test('#20 AC2: the Home address sheet saves, updates the row and says so', async
   await page.goto('/you');
   await page.getByRole('button', { name: /^Home address/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Home address' });
-  await sheet.getByLabel('Address').fill('1 Lygon St, Carlton');
+  await sheet.getByLabel('Address').fill('1 Pretend St, Carlton');
   await sheet.getByRole('button', { name: 'Save address' }).click();
   await expect(sheet).toBeHidden();
   await expect(page.getByText('Home saved')).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Home address/ })).toContainText('1 Lygon St, Carlton');
+  await expect(page.getByRole('button', { name: /^Home address/ })).toContainText('1 Pretend St, Carlton');
 });
 
 test('#20 AC3: Change PIN uses the 4-cell input; the 4th digit changes it', async ({ page, browser }) => {

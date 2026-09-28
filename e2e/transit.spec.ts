@@ -18,7 +18,7 @@ test('#10 AC1 + AC2: cards show transit time from home, or a Directions link wit
   // With a home: the time, from Transitous.
   await page.getByRole('link', { name: 'You', exact: true }).click();
   await page.getByRole('button', { name: /^Home address/ }).click();
-  await page.getByRole('dialog').getByLabel('Address').fill('1 Lygon St, Carlton');
+  await page.getByRole('dialog').getByLabel('Address').fill('1 Pretend St, Carlton');
   await page.getByRole('dialog').getByRole('button', { name: /save address/i }).click();
   await expect(page.getByText(/home saved/i)).toBeVisible();
   await page.goto(sessionUrl);
