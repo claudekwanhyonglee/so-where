@@ -4,6 +4,7 @@ import {
   DEFAULT_RATING,
   estimateSession,
   isUpset,
+  pendingReask,
   rankSession,
   seededRandom,
   SESSION_START_RD,
@@ -12,6 +13,7 @@ import {
   type LastPick,
   type Pick,
   type Rating,
+  type Reask,
 } from './ranking.ts';
 
 // ---------------------------------------------------------------------------------------------
@@ -282,3 +284,103 @@ describe('#7 AC7: tonight\'s craving beats history', () => {
     expect(share(reached)).toBeGreaterThanOrEqual(0.9);
   });
 }, 60_000);
+
+// ---------------------------------------------------------------------------------------------
+// #23: recent picks count more; surprising reversals get asked again
+
+describe('#23 AC1: a later answer on a pair beats an earlier one', () => {
+  it('X>Y then Y>X (no other picks involving them) ranks Y above X', () => {
+    const priors = new Map([1, 2, 3, 4].map((id) => [id, 1500]));
+    const after = estimateSession(priors, [
+      { a: 1, b: 2, scoreA: 1 },
+      { a: 3, b: 4, scoreA: 1 },
+      { a: 1, b: 2, scoreA: 0 },
+    ]);
+    expect(after.get(2)!.mu).toBeGreaterThan(after.get(1)!.mu);
+  });
+});
+
+describe('#23 AC2: one late answer does not undo many earlier ones', () => {
+  it('X>Y five times, then Y>X straight after, keeps X above Y', () => {
+    const priors = new Map([1, 2].map((id) => [id, 1500]));
+    const picks: Pick[] = [...Array.from({ length: 5 }, (): Pick => ({ a: 1, b: 2, scoreA: 1 })), { a: 1, b: 2, scoreA: 0 }];
+    const after = estimateSession(priors, picks);
+    expect(after.get(1)!.mu).toBeGreaterThan(after.get(2)!.mu);
+  });
+});
+
+describe('#23 AC3: a surprising reversal is asked again within 5 pairs', () => {
+  // Agreed with the user: only reversals the model found surprising are re-asked. Most reversals are coin-flips on
+  // close pairs, where asking again just gets another coin-flip; fading already lets the latest answer win there.
+  const priors = new Map([0, 1, 2, 3, 4, 5].map((id) => [id, 1500]));
+  const settledXoverY: Pick[] = [
+    { a: 0, b: 1, scoreA: 1 },
+    { a: 0, b: 2, scoreA: 1 },
+    { a: 0, b: 1, scoreA: 1 },
+    { a: 2, b: 1, scoreA: 1 },
+    { a: 0, b: 3, scoreA: 1 },
+    { a: 3, b: 1, scoreA: 1 },
+    { a: 0, b: 1, scoreA: 1 },
+  ];
+  const reversal: Pick = { a: 1, b: 0, scoreA: 1 };
+  const samePairAs = (pair: [number, number] | null | undefined, x: number, y: number) => !!pair && [x, y].every((id) => pair.includes(id));
+
+  it('reversing a settled preference is flagged for a re-ask', () => {
+    const reask = pendingReask(priors, [...settledXoverY, reversal]);
+    expect(samePairAs(reask?.pair, 0, 1)).toBe(true);
+    expect(reask?.picksSince).toBe(0);
+  });
+
+  it('flipping a close call is not', () => {
+    expect(
+      pendingReask(priors, [
+        { a: 0, b: 1, scoreA: 1 },
+        { a: 0, b: 1, scoreA: 0 },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it('once answered again, it is settled', () => {
+    expect(pendingReask(priors, [...settledXoverY, reversal, { a: 0, b: 1, scoreA: 1 }])).toBeUndefined();
+  });
+
+  it('the pair comes back within the next 5 pairs, even while other rules want those slots', () => {
+    const trueRank = [0, 5, 1, 2, 3, 4]; // trueRank[id]; the reversal was a stray tap
+    for (const seed of SEEDS) {
+      const rng = seededRandom(seed);
+      const picks = [...settledXoverY, reversal];
+      let asked = false;
+      for (let shown = 0; shown < 5 && !asked; shown++) {
+        const ratings = estimateSession(priors, picks);
+        // Nothing compared 3 times yet, so the "under-compared" rule wants every slot.
+        const candidates: Candidate[] = [...priors.keys()].map((id) => ({ id, rating: ratings.get(id)!, comparisons: 0 }));
+        const last = picks.at(-1)!;
+        const pair = choosePair(candidates, rng, { pair: [last.a, last.b] }, pendingReask(priors, picks))!;
+        asked = samePairAs(pair, 0, 1);
+        picks.push({ a: pair[0], b: pair[1], scoreA: trueRank[pair[0]] < trueRank[pair[1]] ? 1 : 0 });
+      }
+      expect(asked).toBe(true);
+    }
+  });
+
+  it('is not shown if one of the two is vetoed', () => {
+    const reask: Reask = { pair: [0, 1], picksSince: 4 };
+    const candidates: Candidate[] = [0, 1, 2, 3].map((id) => ({ id, rating: DEFAULT_RATING, comparisons: 5, vetoed: id === 1 }));
+    for (const seed of SEEDS) expect(choosePair(candidates, seededRandom(seed), undefined, reask)).not.toContain(1);
+  });
+});
+
+describe('#23 AC4: older picks do not lower certainty', () => {
+  it("a place's rd does not grow as unrelated picks pile up after its own", () => {
+    const priors = new Map([0, 1, 2, 3, 4, 5].map((id) => [id, 1500]));
+    const own: Pick[] = [
+      { a: 0, b: 1, scoreA: 1 },
+      { a: 0, b: 2, scoreA: 1 },
+      { a: 1, b: 2, scoreA: 1 },
+    ];
+    const unrelated: Pick[] = Array.from({ length: 20 }, (_, i): Pick => ({ a: 3 + (i % 3), b: 3 + ((i + 1) % 3), scoreA: 1 }));
+    const before = estimateSession(priors, own).get(0)!.rd;
+    const after = estimateSession(priors, [...own, ...unrelated]).get(0)!.rd;
+    expect(after).toBeLessThanOrEqual(before * 1.02);
+  });
+});

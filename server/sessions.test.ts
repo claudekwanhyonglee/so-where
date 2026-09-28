@@ -205,3 +205,22 @@ describe('#16 AC4: recent sessions', () => {
     expect(recent.topPick).toBeNull();
   });
 });
+
+describe('#23 AC3: a surprising reversal comes back within 5 pairs', () => {
+  it('is offered again through the API', async () => {
+    const { alex, ids, setId } = await setup();
+    const id = await start(alex, setId);
+    const [a, b, c] = ids;
+    const pick = async (x: number, y: number, winner: number) => (await (await alex.post(`/api/sessions/${id}/picks`, { a: x, b: y, winner })).json()).pair as CardPlace[];
+    for (const [x, y] of [[a, b], [a, c], [a, b], [c, b], [a, b]]) await pick(x, y, x);
+
+    let pair = await pick(b, a, b); // the reversal
+    const shown: number[][] = [];
+    for (let i = 0; i < 5; i++) {
+      const [x, y] = pair.map((p) => p.id);
+      shown.push([x, y].sort());
+      pair = await pick(x, y, [a, c, b].find((p) => p === x || p === y)!);
+    }
+    expect(shown).toContainEqual([a, b].sort());
+  });
+});

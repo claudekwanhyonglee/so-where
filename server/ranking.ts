@@ -8,7 +8,7 @@
 // fit), with each place's history score as the starting belief, held only loosely (rd reset to 350). With no
 // picks yet, a session rating is the history score at low confidence; each pick then moves it a lot. Fitting all
 // picks together (rather than updating pick by pick) keeps the order consistent: if A beat B and B beat C, A
-// stays above C.
+// stays above C. Recent picks count a little more (see recencyWeights), but certainty counts every pick in full.
 
 export type Rating = { mu: number; rd: number };
 
@@ -52,7 +52,10 @@ function glicko(player: Rating, opponent: Rating, score: number): Rating {
   return { mu: player.mu + (Q / precision) * gj * (score - e), rd: Math.max(HISTORY_MIN_RD, Math.sqrt(1 / precision)) };
 }
 
-export const updateHistory = ([a, b]: [Rating, Rating], scoreA: Pick['scoreA']): [Rating, Rating] => [glicko(a, b, scoreA), glicko(b, a, 1 - scoreA)];
+/** The chance this person picks A over B, allowing for how unsure both ratings are. */
+const winChance = (a: Rating, b: Rating) => 1 / (1 + 10 ** ((-g(Math.hypot(a.rd, b.rd)) * (a.mu - b.mu)) / 400));
+
+export const updateHistory =([a, b]: [Rating, Rating], scoreA: Pick['scoreA']): [Rating, Rating] => [glicko(a, b, scoreA), glicko(b, a, 1 - scoreA)];
 
 // ---------------------------------------------------------------------------------------------
 // Session
@@ -62,31 +65,92 @@ export const updateHistory = ([a, b]: [Rating, Rating], scoreA: Pick['scoreA']):
  * Picks involving places not in `priors` (e.g. removed from the set) are ignored.
  */
 export function estimateSession(priors: Map<number, number>, picks: Pick[]): Map<number, Rating> {
-  const games = new Map<number, { opponent: number; score: number }[]>([...priors.keys()].map((id) => [id, []]));
-  for (const { a, b, scoreA } of picks) {
-    if (!priors.has(a) || !priors.has(b)) continue;
-    games.get(a)!.push({ opponent: b, score: scoreA });
-    games.get(b)!.push({ opponent: a, score: 1 - scoreA });
-  }
+  const games = new Map<number, { opponent: number; score: number; weight: number }[]>([...priors.keys()].map((id) => [id, []]));
+  const weights = recencyWeights(picks);
+  picks.forEach(({ a, b, scoreA }, i) => {
+    if (!priors.has(a) || !priors.has(b)) return;
+    games.get(a)!.push({ opponent: b, score: scoreA, weight: weights[i] });
+    games.get(b)!.push({ opponent: a, score: 1 - scoreA, weight: weights[i] });
+  });
 
   // Maximise the posterior one place at a time (Newton steps); it's concave, so this converges quickly.
   const priorPrecision = 1 / SESSION_START_RD ** 2;
   const mu = new Map(priors);
-  const precision = new Map<number, number>();
+  const beats = (id: number, opponent: number) => 1 / (1 + Math.exp(-Q * (mu.get(id)! - mu.get(opponent)!)));
   for (let sweep = 0; sweep < 25; sweep++) {
     for (const [id, list] of games) {
       let slope = -(mu.get(id)! - priors.get(id)!) * priorPrecision;
       let info = priorPrecision;
-      for (const { opponent, score } of list) {
-        const p = 1 / (1 + Math.exp(-Q * (mu.get(id)! - mu.get(opponent)!)));
-        slope += Q * (score - p);
-        info += Q * Q * p * (1 - p);
+      for (const { opponent, score, weight } of list) {
+        const p = beats(id, opponent);
+        slope += weight * Q * (score - p);
+        info += weight * Q * Q * p * (1 - p);
       }
       mu.set(id, mu.get(id)! + slope / info);
-      precision.set(id, info);
     }
   }
-  return new Map([...mu].map(([id, m]) => [id, { mu: m, rd: Math.max(SESSION_MIN_RD, 1 / Math.sqrt(precision.get(id) ?? priorPrecision)) }]));
+
+  // Certainty counts every pick in full, so older picks don't make a place look less explored.
+  const rd = (id: number) => {
+    const info = games.get(id)!.reduce((sum, { opponent }) => {
+      const p = beats(id, opponent);
+      return sum + Q * Q * p * (1 - p);
+    }, priorPrecision);
+    return Math.max(SESSION_MIN_RD, 1 / Math.sqrt(info));
+  };
+  return new Map([...mu].map(([id, m]) => [id, { mu: m, rd: rd(id) }]));
+}
+
+const SAME_PAIR_HALF_LIFE = 5; // later answers on the same pair
+const SESSION_HALF_LIFE_SHARE = 2; // the half-life is twice the picks so far, so the oldest pick keeps ~70% of its weight
+const MIN_SESSION_HALF_LIFE = 5;
+
+const pairKey = ({ a, b }: Pick) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+
+/**
+ * How much each pick counts. Recent picks count a little more than old ones, over a window that grows with the
+ * session, so evidence builds up rather than being forgotten. A pick counts much less once the same pair has
+ * been answered again, so the latest answer on a disputed pair wins.
+ */
+function recencyWeights(picks: Pick[]) {
+  const n = picks.length;
+  const halfLife = Math.max(MIN_SESSION_HALF_LIFE, SESSION_HALF_LIFE_SHARE * n);
+  const laterOnPair = new Map<string, number>();
+  const weights: number[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const later = laterOnPair.get(pairKey(picks[i])) ?? 0;
+    weights[i] = 0.5 ** ((n - 1 - i) / halfLife + later / SAME_PAIR_HALF_LIFE);
+    laterOnPair.set(pairKey(picks[i]), later + 1);
+  }
+  return weights;
+}
+
+/** A reversal the person should be asked about again. */
+export type Reask = { pair: [number, number]; picksSince: number };
+
+const REASK_WITHIN = 5; // pairs
+const SURPRISING = 0.25; // the model gave the new answer less than this chance
+
+/**
+ * The most recent reversal worth asking about again: the answer on a pair flipped, the model thought the new
+ * answer unlikely, and the pair hasn't been answered since. A flip on a close call isn't asked again (it's
+ * usually noise, and asking again just gets another coin-flip).
+ */
+export function pendingReask(priors: Map<number, number>, picks: Pick[]): Reask | undefined {
+  const winner = ({ a, b, scoreA }: Pick) => (scoreA === 1 ? a : scoreA === 0 ? b : undefined);
+  for (let r = picks.length - 1; r >= Math.max(0, picks.length - REASK_WITHIN); r--) {
+    const pick = picks[r];
+    const key = pairKey(pick);
+    if (picks.slice(r + 1).some((p) => pairKey(p) === key)) continue;
+    const previous = picks.slice(0, r).findLast((p) => pairKey(p) === key);
+    const [now, before] = [winner(pick), previous && winner(previous)];
+    if (now === undefined || before === undefined || now === before) continue;
+
+    const ratings = estimateSession(priors, picks.slice(0, r));
+    const [w, l] = [ratings.get(now), ratings.get(before)];
+    if (w && l && winChance(w, l) < SURPRISING) return { pair: [pick.a, pick.b], picksSince: picks.length - 1 - r };
+  }
+  return undefined;
 }
 
 /** An upset: the winner was rated below the loser going in. */
@@ -122,7 +186,7 @@ function pickWeighted<T>(items: T[], weight: (item: T) => number, rng: () => num
 
 /** How unsure we are which of two places this person prefers: highest when it's a coin flip. */
 function closeness(a: Rating, b: Rating) {
-  const p = 1 / (1 + 10 ** ((-g(Math.hypot(a.rd, b.rd)) * (a.mu - b.mu)) / 400));
+  const p = winChance(a, b);
   return p * (1 - p);
 }
 
@@ -135,12 +199,17 @@ const samePair = (x: [number, number], y?: [number, number]) => !!y && ((x[0] ==
  * 2. Challenge: after an upset, the winner takes on the current #1, so a surprise favourite rises fast.
  * 3. A fresh look: places not yet seen tonight are shown, each against a strong place, since cravings change.
  * 4. Some pairs go to whatever the engine is least sure about, however low its score.
- * 5. Otherwise, draw a plausible score for every place from its rating (Thompson sampling) and compare the
+ * 5. A surprising reversal is asked again, so a third answer settles a stray tap versus a real change of mind.
+ *    It takes precedence over everything once it's been waiting 4 pairs, so it's always back within 5.
+ * 6. Otherwise, draw a plausible score for every place from its rating (Thompson sampling) and compare the
  *    closest-call neighbours near the top of that draw: that settles who's in the top 5, and their order.
  */
-export function choosePair(candidates: Candidate[], rng: () => number, last?: LastPick): [number, number] | null {
+export function choosePair(candidates: Candidate[], rng: () => number, last?: LastPick, reask?: Reask): [number, number] | null {
   const pool = candidates.filter((c) => !c.vetoed);
   if (pool.length < 2) return null;
+
+  const reaskable = reask && reask.pair.every((id) => pool.some((c) => c.id === id)) ? reask : undefined;
+  if (reaskable && reaskable.picksSince >= REASK_WITHIN - 1) return reaskable.pair;
 
   const draw = new Map(pool.map((c) => [c.id, c.rating.mu + c.rating.rd * normal(rng)]));
   const byDraw = (among: Candidate[]) => [...among].sort((a, b) => draw.get(b.id)! - draw.get(a.id)!);
@@ -176,6 +245,8 @@ export function choosePair(candidates: Candidate[], rng: () => number, last?: La
     const first = pickWeighted(pool, (c) => (c.rating.rd - SESSION_MIN_RD) ** 2 + 1, rng);
     return [first.id, closestDrawTo(first, pool).id];
   }
+
+  if (reaskable && reaskable.picksSince >= 1) return reaskable.pair;
 
   const drawn = byDraw(pool);
   const neighbours = drawn

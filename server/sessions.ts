@@ -5,7 +5,7 @@ import type { AppEnv } from './auth.ts';
 import type { Db } from './db.ts';
 import { leaderboard } from './leaderboard.ts';
 import { getPlace } from './places.ts';
-import { choosePair, DEFAULT_RATING, estimateSession, isUpset, updateHistory, type Candidate, type LastPick, type Pick, type Rating } from './ranking.ts';
+import { choosePair, DEFAULT_RATING, estimateSession, isUpset, pendingReask, updateHistory, type Candidate, type LastPick, type Pick, type Rating } from './ranking.ts';
 import { ALL_PLACES, parseSetId, setExists, setName, setPlaceIds, type SetId } from './sets.ts';
 import { transitTime } from './transit.ts';
 
@@ -47,10 +47,8 @@ export function personState(db: Db, session: Session, personId: number) {
   const priors = new Map(priorRows.filter((r) => inSet.has(r.place_id)).map((r) => [r.place_id, r.mu]));
 
   const pickRows = db.prepare('SELECT a, b, score_a, upset FROM picks WHERE session_id = ? AND person_id = ? ORDER BY id').all(session.id, personId) as PickRow[];
-  const ratings = estimateSession(
-    priors,
-    pickRows.map((r) => ({ a: r.a, b: r.b, scoreA: r.score_a })),
-  );
+  const picks = pickRows.map((r): Pick => ({ a: r.a, b: r.b, scoreA: r.score_a }));
+  const ratings = estimateSession(priors, picks);
 
   const comparisons = new Map(
     (db.prepare('SELECT place_id, comparisons FROM history WHERE person_id = ?').all(personId) as { place_id: number; comparisons: number }[]).map((r) => [
@@ -69,7 +67,7 @@ export function personState(db: Db, session: Session, personId: number) {
     upset: !!lastRow.upset,
   };
 
-  return { candidates, last, pickCount: pickRows.length };
+  return { candidates, last, reask: pendingReask(priors, picks), pickCount: pickRows.length };
 }
 
 const HISTORY_COLUMNS = 'mu, rd, comparisons';
@@ -119,8 +117,8 @@ const cardPlace = (db: Db, id: number) => {
 };
 
 function nextPair(db: Db, session: Session, personId: number) {
-  const { candidates, last, pickCount } = personState(db, session, personId);
-  const pair = choosePair(candidates, Math.random, last);
+  const { candidates, last, reask, pickCount } = personState(db, session, personId);
+  const pair = choosePair(candidates, Math.random, last, reask);
   return { pair: pair && pair.map((id) => cardPlace(db, id)), picks: pickCount };
 }
 
