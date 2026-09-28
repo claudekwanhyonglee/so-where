@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError } from './api.ts';
+import { Home } from './Home.tsx';
 import { Places } from './Places.tsx';
+import { SessionPage } from './Session.tsx';
 import { Profile } from './Profile.tsx';
 import { SetPage, Sets } from './Sets.tsx';
 import { Link, usePath } from './router.tsx';
@@ -40,6 +42,8 @@ function Page({ path, me, refresh }: { path: string; me: Me; refresh: () => void
   if (path === '/sets') return <Sets />;
   const setId = path.match(/^\/sets\/([^/]+)$/)?.[1];
   if (setId) return <SetPage key={setId} id={setId} />;
+  const sessionId = path.match(/^\/s\/([\w-]+)$/)?.[1];
+  if (sessionId) return <SessionPage key={sessionId} id={sessionId} />;
   return <Home me={me} />;
 }
 
@@ -76,6 +80,3 @@ function Shell({ me, children }: { me: Me; children: ReactNode }) {
   );
 }
 
-function Home({ me }: { me: Me }) {
-  return <h1 className="text-3xl font-black tracking-tight">Where to, {me.name}?</h1>;
-}

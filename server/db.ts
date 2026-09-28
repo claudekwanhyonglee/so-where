@@ -49,6 +49,53 @@ export const migrations: string[] = [
      place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
      PRIMARY KEY (set_id, place_id)
    );`,
+
+  // Sessions. A NULL set_id means "All places". session_priors snapshots each person's history score for a place
+  // the first time they meet it in the session, so tonight's picks (which also update history) aren't counted twice.
+  `CREATE TABLE sessions (
+     id TEXT PRIMARY KEY,
+     set_id INTEGER REFERENCES sets(id) ON DELETE CASCADE,
+     created_by INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+     created_at INTEGER NOT NULL
+   );
+   CREATE TABLE session_members (
+     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+     person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+     joined_at INTEGER NOT NULL,
+     PRIMARY KEY (session_id, person_id)
+   );
+   CREATE TABLE session_priors (
+     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+     person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+     place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+     mu REAL NOT NULL,
+     PRIMARY KEY (session_id, person_id, place_id)
+   );
+   CREATE TABLE picks (
+     id INTEGER PRIMARY KEY,
+     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+     person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+     a INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+     b INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+     score_a REAL NOT NULL,
+     upset INTEGER NOT NULL DEFAULT 0,
+     created_at INTEGER NOT NULL
+   );
+   CREATE INDEX picks_by_person ON picks (session_id, person_id, id);
+   CREATE TABLE vetoes (
+     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+     person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+     place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+     PRIMARY KEY (session_id, person_id, place_id)
+   );
+   CREATE TABLE history (
+     person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+     place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+     mu REAL NOT NULL,
+     rd REAL NOT NULL,
+     comparisons INTEGER NOT NULL DEFAULT 0,
+     PRIMARY KEY (person_id, place_id)
+   );`,
 ];
 
 export function migrate(db: Db, steps: string[] = migrations) {

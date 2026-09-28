@@ -5,6 +5,7 @@ import type { Db } from './db.ts';
 import { createNominatim } from './nominatim.ts';
 import { createPlaceLookup } from './place-lookup.ts';
 import { placesRoutes } from './places.ts';
+import { sessionsRoutes } from './sessions.ts';
 import { setsRoutes } from './sets.ts';
 import { importRoutes } from './takeout.ts';
 
@@ -37,6 +38,7 @@ export function createApp(deps: Deps) {
   app.route('/api/places', placesRoutes(deps, nominatim));
   app.route('/api/import', importRoutes(deps, placeLookup));
   app.route('/api/sets', setsRoutes(deps));
+  app.route('/api/sessions', sessionsRoutes(deps));
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 
   app.use('/*', serveStatic({ root: config.webRoot }));

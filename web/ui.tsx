@@ -1,4 +1,12 @@
-import { useId, useState, type ButtonHTMLAttributes, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react';
+import {
+  useId,
+  useState,
+  type ButtonHTMLAttributes,
+  type FormEvent,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+} from 'react';
 import { errorMessage } from './api.ts';
 
 /** Form submit handler with busy + error state. */
@@ -53,7 +61,25 @@ export function Field({ label, hint, ...props }: { label: string; hint?: ReactNo
   );
 }
 
-export const PinField = (props: { label: string; value: string; onChange: (pin: string) => void }) => (
+export function Select({ label, children, ...props }: { label: string } & SelectHTMLAttributes<HTMLSelectElement>) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-sm font-medium text-stone-700">
+        {label}
+      </label>
+      <select
+        id={id}
+        className="rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-base outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+        {...props}
+      >
+        {children}
+      </select>
+    </div>
+  );
+}
+
+export const PinField =(props: { label: string; value: string; onChange: (pin: string) => void }) => (
   <Field
     label={props.label}
     type="password"
