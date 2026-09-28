@@ -27,7 +27,7 @@ const noAccess = (c: Context) =>
   c.req.path.startsWith('/api/')
     ? c.json({ error: 'No access. Ask for the invite link.' }, 403)
     : c.html(
-        '<!doctype html><meta name="viewport" content="width=device-width"><title>so-where</title>' +
+        '<!doctype html><meta name="viewport" content="width=device-width"><title>So Where?</title>' +
           '<body style="font-family:system-ui;padding:2rem"><h1>No access</h1><p>Ask whoever runs this for the invite link.</p>',
         403,
       );

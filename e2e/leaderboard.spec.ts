@@ -13,7 +13,7 @@ test('#9 AC1–AC5: the leaderboard updates live across devices', async ({ brows
     await h.getByRole('button', { name: /add place/i }).click();
     await expect(h.getByRole('status')).toContainText(name);
   }
-  await h.getByRole('link', { name: 'Sets', exact: true }).click();
+  await h.goto('/sets'); // the Sets page, until #19 folds it into Places
   const setName = uniqueName('Live ');
   await h.getByLabel('New set name').fill(setName);
   await h.getByRole('button', { name: /create set/i }).click();

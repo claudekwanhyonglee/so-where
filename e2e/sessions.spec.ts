@@ -15,7 +15,7 @@ async function startSession(page: Page, places: string[]) {
   await page.getByRole('link', { name: 'Places', exact: true }).click();
   for (const [i, name] of places.entries()) await addPlace(page, name, i === 0 ? 'Try the special' : '');
 
-  await page.getByRole('link', { name: 'Sets', exact: true }).click();
+  await page.goto('/sets'); // the Sets page, until #19 folds it into Places
   const setName = uniqueName('Tonight ');
   await page.getByLabel('New set name').fill(setName);
   await page.getByRole('button', { name: /create set/i }).click();

@@ -15,7 +15,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 p-4">
       <header className="text-center">
-        <h1 className="text-5xl font-black tracking-tight text-orange-600">so-where</h1>
+        <h1 className="font-display text-5xl text-tomato">So Where?</h1>
         <p className="mt-2 text-stone-600">Where should we eat? Let's actually decide.</p>
       </header>
       <Card className="flex flex-col gap-4">

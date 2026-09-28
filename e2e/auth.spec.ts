@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { INVITE, PIN_WARNING, signUp, uniqueName } from './helpers.ts';
+import { INVITE, PIN_WARNING, signedInAs, signUp, uniqueName } from './helpers.ts';
 
 test('#3 AC1: without the invite code the app shows no access', async ({ page }) => {
   await page.goto('/');
@@ -10,9 +10,9 @@ test('#3 AC2 + AC9: a new person signs up with a warned PIN and stays signed in'
   const name = uniqueName('Alex');
   await signUp(page, name);
   await page.reload();
-  await expect(page.getByText(`Hi, ${name}`)).toBeVisible();
+  await signedInAs(page, name);
   await page.goto('/');
-  await expect(page.getByText(`Hi, ${name}`)).toBeVisible();
+  await signedInAs(page, name);
 });
 
 test('#3 AC3: another device signs in by choosing the name and entering the PIN', async ({ page, browser }) => {
@@ -27,7 +27,7 @@ test('#3 AC3: another device signs in by choosing the name and entering the PIN'
   await expect(laptop.getByText(/wrong pin/i)).toBeVisible();
   await laptop.getByLabel('PIN').fill('2468');
   await laptop.getByRole('button', { name: /sign in/i }).click();
-  await expect(laptop.getByText(`Hi, ${name}`)).toBeVisible();
+  await signedInAs(laptop, name);
 });
 
 test('#3 AC6 + AC7 + AC8 + AC9: profile — home address, PIN change with warning, sign out', async ({ page }) => {

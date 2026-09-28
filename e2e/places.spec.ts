@@ -7,7 +7,7 @@ const link = (id: string, name: string) =>
 
 test('#4 AC1 + AC3 + AC4 + AC5 + AC6: add, dedupe, edit and delete places', async ({ page }) => {
   await signUp(page, uniqueName('Places'));
-  await page.getByRole('link', { name: 'Places' }).click();
+  await page.getByRole('link', { name: 'Places', exact: true }).click();
 
   const name = uniqueName('Pretend Diner ');
   const id = Math.floor(Math.random() * 1e12).toString(16);

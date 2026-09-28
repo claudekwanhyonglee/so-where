@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
 import { Leaderboard } from './Leaderboard.tsx';
 import { googleMapsUrl, transitDirectionsUrl } from './model.ts';
-import { Button, Card, Notice } from './ui.tsx';
+import { Button, Card, Notice, Sheet } from './ui.tsx';
 import { usePolling } from './usePolling.ts';
 
 export type CardPlace = { id: number; name: string; suburb: string | null; note: string; key: string; lat: number | null; lng: number | null };
@@ -40,7 +40,7 @@ function SessionHeader({ info }: { info: SessionInfo }) {
         </Button>
       </div>
       {sharing && (
-        <Card className="flex flex-col gap-2">
+        <Sheet title="Invite your group" onClose={() => setSharing(false)}>
           <label className="text-sm font-medium text-stone-700" htmlFor="share-link">
             Share link
           </label>
@@ -49,7 +49,7 @@ function SessionHeader({ info }: { info: SessionInfo }) {
             <Button onClick={copy}>{copied ? 'Copied' : 'Copy'}</Button>
           </div>
           <p className="text-xs text-stone-500">Anyone with this link can get in, so share it only with your group.</p>
-        </Card>
+        </Sheet>
       )}
       <div className="flex flex-wrap items-center gap-1.5 text-sm">
         <span className="font-semibold text-stone-600">Here:</span>

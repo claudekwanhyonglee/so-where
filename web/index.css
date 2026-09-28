@@ -1,1 +1,62 @@
 @import 'tailwindcss';
+@import '@fontsource/shrikhand';
+@import '@fontsource-variable/figtree';
+
+@theme {
+  --breakpoint-desk: 760px;
+
+  --font-sans: 'Figtree Variable', system-ui, sans-serif;
+  --font-display: Shrikhand, Georgia, serif;
+
+  --color-peach: #fff4ec;
+  --color-ink: #2a1712;
+  --color-muted: #8a6b60;
+  --color-tomato: #e8432c;
+  --color-tomato-deep: #c2321d;
+  --color-mustard: #ffc93c;
+  --color-leaf: #1f8a70;
+  --color-blush: #ffe1d6;
+  --color-low: #ffdca8;
+  --color-low-ink: #8a4b00;
+  --color-up: #1f9d6b;
+  --color-stamp: #d62d4f;
+  --color-edge: #f0dccf;
+  --color-divider: #f3e4da;
+  --color-soft: #f6e6dc;
+}
+
+:root {
+  /* Height of the phone tab bar, so pages and toasts clear it. */
+  --tabbar-h: calc(70px + env(safe-area-inset-bottom, 0px));
+  @variant desk {
+    --tabbar-h: 0px;
+  }
+}
+
+body {
+  @apply bg-peach font-sans text-[15px]/[1.45] text-ink antialiased;
+}
+
+:focus-visible {
+  @apply outline-3 outline-offset-2 outline-tomato;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

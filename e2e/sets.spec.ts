@@ -15,7 +15,7 @@ test('#6 AC1 + AC2 + AC3: manage sets in the app', async ({ page }) => {
   await addPlace(page, p1);
   await addPlace(page, p2);
 
-  await page.getByRole('link', { name: 'Sets', exact: true }).click();
+  await page.goto('/sets'); // the Sets page, until #19 folds it into Places
   const all = page.getByRole('listitem').filter({ hasText: 'All places' });
   await expect(all).toBeVisible();
   await all.getByRole('link').click();
@@ -24,7 +24,7 @@ test('#6 AC1 + AC2 + AC3: manage sets in the app', async ({ page }) => {
   await expect(page.getByRole('button', { name: /rename|delete/i })).toHaveCount(0);
   await expect(page.getByRole('checkbox')).toHaveCount(0);
 
-  await page.getByRole('link', { name: 'Sets', exact: true }).click();
+  await page.goto('/sets'); // the Sets page, until #19 folds it into Places
   const setName = uniqueName('Date night ');
   await page.getByLabel('New set name').fill(setName);
   await page.getByRole('button', { name: /create set/i }).click();

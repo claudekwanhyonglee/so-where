@@ -6,7 +6,7 @@ const fixture = (name: string) => fileURLToPath(new URL(`../server/fixtures/${na
 
 test('#5 AC1 + AC2 + AC4: import Takeout files and see what was added', async ({ page }) => {
   await signUp(page, uniqueName('Importer'));
-  await page.getByRole('link', { name: 'Places' }).click();
+  await page.getByRole('link', { name: 'Places', exact: true }).click();
 
   const importer = page.getByRole('region', { name: /import from google takeout/i });
   await importer.getByLabel(/takeout files/i).setInputFiles([fixture('Date night.csv'), fixture('Saved Places.json')]);

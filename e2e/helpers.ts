@@ -13,8 +13,16 @@ export async function signUp(page: Page, name: string, pin = '1234', path = '/')
   await page.getByLabel('Your name').fill(name);
   await page.getByLabel('Choose a 4-digit PIN').fill(pin);
   await page.getByRole('button', { name: /^start$/i }).click();
-  await expect(page.getByText(`Hi, ${name}`)).toBeVisible();
+  await expectSignedIn(page);
 }
+
+/** The signed-in app is showing: its nav (the top nav or the bottom tabs, whichever fits the screen) is there. */
+export async function expectSignedIn(page: Page) {
+  await expect(page.getByRole('link', { name: 'You', exact: true })).toBeVisible();
+}
+
+/** Who the desktop top nav says is signed in. */
+export const signedInAs = (page: Page, name: string) => expect(page.getByRole('banner').getByText(name, { exact: true })).toBeVisible();
 
 /** A fresh browser (as if another device) with a new person signed in. */
 export async function newPerson(browser: Browser, prefix: string, path = '/') {

@@ -1,4 +1,6 @@
+import { MapPin, Rows2, UserRound, type LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Toaster } from 'sonner';
 import { api, ApiError } from './api.ts';
 import { Home } from './Home.tsx';
 import { Places } from './Places.tsx';
@@ -7,6 +9,7 @@ import { Profile } from './Profile.tsx';
 import { SetPage, Sets } from './Sets.tsx';
 import { Link, usePath } from './router.tsx';
 import { SignIn } from './SignIn.tsx';
+import { Avatar } from './ui.tsx';
 
 export type Me = { id: number; name: string; home: { address: string; lat: number; lng: number } | null };
 
@@ -26,13 +29,16 @@ export function App() {
   const { me, refresh } = useMe();
   const path = usePath();
 
-  if (me === undefined) return null;
-  if (me === null) return <SignIn onSignedIn={refresh} />;
-
   return (
-    <Shell me={me}>
-      <Page path={path} me={me} refresh={refresh} />
-    </Shell>
+    <>
+      {me === null && <SignIn onSignedIn={refresh} />}
+      {me && (
+        <Shell me={me}>
+          <Page path={path} me={me} refresh={refresh} />
+        </Shell>
+      )}
+      <Toaster position="bottom-center" offset={{ bottom: 'calc(var(--tabbar-h) + 16px)' }} mobileOffset={{ bottom: 'calc(var(--tabbar-h) + 16px)' }} />
+    </>
   );
 }
 
@@ -47,36 +53,80 @@ function Page({ path, me, refresh }: { path: string; me: Me; refresh: () => void
   return <Home me={me} />;
 }
 
-const NAV = [
-  { to: '/', label: 'Pick' },
-  { to: '/places', label: 'Places' },
-  { to: '/sets', label: 'Sets' },
-  { to: '/you', label: 'You' },
+type NavItem = { to: string; label: string; icon: LucideIcon };
+
+const NAV: NavItem[] = [
+  { to: '/', label: 'Pick', icon: Rows2 },
+  { to: '/places', label: 'Places', icon: MapPin },
+  { to: '/you', label: 'You', icon: UserRound },
 ];
 
+/** The nav item a route belongs to: sessions under Pick, sets under Places. */
+function activeNav(path: string) {
+  if (path.startsWith('/places') || path.startsWith('/sets')) return '/places';
+  if (path === '/you') return '/you';
+  return '/';
+}
+
 function Shell({ me, children }: { me: Me; children: ReactNode }) {
-  const path = usePath();
+  const active = activeNav(usePath());
   return (
-    <div className="mx-auto flex min-h-dvh max-w-5xl flex-col gap-5 p-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <Link to="/" className="text-2xl font-black tracking-tight text-orange-600">
-          so-where
-        </Link>
-        <nav className="flex gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-stone-200">
-          {NAV.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`rounded-xl px-3 py-1.5 text-sm font-semibold ${path === item.to ? 'bg-orange-600 text-white' : 'text-stone-600 hover:bg-stone-100'}`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      </header>
-      <p className="text-sm text-stone-500">Hi, {me.name}</p>
-      <main className="flex flex-col gap-4">{children}</main>
+    <div className="flex min-h-dvh flex-col pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
+      <TopNav me={me} active={active} />
+      <main className="mx-auto flex w-full max-w-[1080px] flex-1 flex-col gap-4 px-[18px] pt-[18px] pb-[calc(var(--tabbar-h)+28px)] desk:gap-5 desk:px-8 desk:pt-7 desk:pb-10">
+        {children}
+      </main>
+      <TabBar active={active} />
     </div>
   );
 }
 
+function TopNav({ me, active }: { me: Me; active: string }) {
+  return (
+    <header className="hidden items-center gap-6 border-b border-divider px-7 py-3.5 desk:flex">
+      <Link to="/" className="font-display text-[26px]/none text-tomato">
+        So Where?
+      </Link>
+      <nav aria-label="Main" className="flex gap-1">
+        {NAV.map(({ to, label, icon: Icon }) => (
+          <Link
+            key={to}
+            to={to}
+            aria-current={active === to ? 'page' : undefined}
+            className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 font-semibold text-muted hover:bg-soft hover:text-ink aria-[current=page]:bg-blush aria-[current=page]:text-tomato-deep"
+          >
+            <Icon size={18} aria-hidden="true" />
+            {label}
+          </Link>
+        ))}
+      </nav>
+      <span className="ml-auto flex items-center gap-2 font-semibold">
+        <Avatar person={me} />
+        <span>{me.name}</span>
+      </span>
+    </header>
+  );
+}
+
+function TabBar({ active }: { active: string }) {
+  return (
+    <nav
+      aria-label="Tabs"
+      className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-3 border-t border-divider bg-white px-2.5 pt-2 pb-[calc(14px+env(safe-area-inset-bottom,0px))] desk:hidden"
+    >
+      {NAV.map(({ to, label, icon: Icon }) => (
+        <Link
+          key={to}
+          to={to}
+          aria-current={active === to ? 'page' : undefined}
+          className="group flex flex-col items-center gap-[3px] text-[11px] font-semibold text-muted aria-[current=page]:text-ink"
+        >
+          <span className="grid place-items-center rounded-full px-[18px] py-1 group-aria-[current=page]:bg-blush group-aria-[current=page]:text-tomato-deep">
+            <Icon size={22} aria-hidden="true" />
+          </span>
+          {label}
+        </Link>
+      ))}
+    </nav>
+  );
+}

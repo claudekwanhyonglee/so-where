@@ -12,7 +12,7 @@ test('#10 AC1 + AC2: cards show transit time from home, or a Directions link wit
     await page.getByRole('button', { name: /add place/i }).click();
     await expect(page.getByRole('status')).toContainText(name);
   }
-  await page.getByRole('link', { name: 'Sets', exact: true }).click();
+  await page.goto('/sets'); // the Sets page, until #19 folds it into Places
   const setName = uniqueName('Transit ');
   await page.getByLabel('New set name').fill(setName);
   await page.getByRole('button', { name: /create set/i }).click();
