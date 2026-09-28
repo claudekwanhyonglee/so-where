@@ -3,7 +3,10 @@ import {
   choosePair,
   DEFAULT_RATING,
   estimateSession,
+  groupRanking,
+  sampleGroup,
   isUpset,
+  pendingReask,
   rankSession,
   seededRandom,
   SESSION_START_RD,
@@ -12,6 +15,7 @@ import {
   type LastPick,
   type Pick,
   type Rating,
+  type Reask,
 } from './ranking.ts';
 
 // ---------------------------------------------------------------------------------------------
@@ -282,3 +286,250 @@ describe('#7 AC7: tonight\'s craving beats history', () => {
     expect(share(reached)).toBeGreaterThanOrEqual(0.9);
   });
 }, 60_000);
+
+// ---------------------------------------------------------------------------------------------
+// #23: recent picks count more; surprising reversals get asked again
+
+describe('#23 AC1: a later answer on a pair beats an earlier one', () => {
+  it('X>Y then Y>X (no other picks involving them) ranks Y above X', () => {
+    const priors = new Map([1, 2, 3, 4].map((id) => [id, 1500]));
+    const after = estimateSession(priors, [
+      { a: 1, b: 2, scoreA: 1 },
+      { a: 3, b: 4, scoreA: 1 },
+      { a: 1, b: 2, scoreA: 0 },
+    ]);
+    expect(after.get(2)!.mu).toBeGreaterThan(after.get(1)!.mu);
+  });
+});
+
+describe('#23 AC2: one late answer does not undo many earlier ones', () => {
+  it('X>Y five times, then Y>X straight after, keeps X above Y', () => {
+    const priors = new Map([1, 2].map((id) => [id, 1500]));
+    const picks: Pick[] = [...Array.from({ length: 5 }, (): Pick => ({ a: 1, b: 2, scoreA: 1 })), { a: 1, b: 2, scoreA: 0 }];
+    const after = estimateSession(priors, picks);
+    expect(after.get(1)!.mu).toBeGreaterThan(after.get(2)!.mu);
+  });
+});
+
+describe('#23 AC3: a surprising reversal is asked again within 5 pairs', () => {
+  // Agreed with the user: only reversals the model found surprising are re-asked. Most reversals are coin-flips on
+  // close pairs, where asking again just gets another coin-flip; fading already lets the latest answer win there.
+  const priors = new Map([0, 1, 2, 3, 4, 5].map((id) => [id, 1500]));
+  const settledXoverY: Pick[] = [
+    { a: 0, b: 1, scoreA: 1 },
+    { a: 0, b: 2, scoreA: 1 },
+    { a: 0, b: 1, scoreA: 1 },
+    { a: 2, b: 1, scoreA: 1 },
+    { a: 0, b: 3, scoreA: 1 },
+    { a: 3, b: 1, scoreA: 1 },
+    { a: 0, b: 1, scoreA: 1 },
+  ];
+  const reversal: Pick = { a: 1, b: 0, scoreA: 1 };
+  const samePairAs = (pair: [number, number] | null | undefined, x: number, y: number) => !!pair && [x, y].every((id) => pair.includes(id));
+
+  it('reversing a settled preference is flagged for a re-ask', () => {
+    const reask = pendingReask(priors, [...settledXoverY, reversal]);
+    expect(samePairAs(reask?.pair, 0, 1)).toBe(true);
+    expect(reask?.picksSince).toBe(0);
+  });
+
+  it('flipping a close call is not', () => {
+    expect(
+      pendingReask(priors, [
+        { a: 0, b: 1, scoreA: 1 },
+        { a: 0, b: 1, scoreA: 0 },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it('once answered again, it is settled', () => {
+    expect(pendingReask(priors, [...settledXoverY, reversal, { a: 0, b: 1, scoreA: 1 }])).toBeUndefined();
+  });
+
+  it('the pair comes back within the next 5 pairs, even while other rules want those slots', () => {
+    const trueRank = [0, 5, 1, 2, 3, 4]; // trueRank[id]; the reversal was a stray tap
+    for (const seed of SEEDS) {
+      const rng = seededRandom(seed);
+      const picks = [...settledXoverY, reversal];
+      let asked = false;
+      for (let shown = 0; shown < 5 && !asked; shown++) {
+        const ratings = estimateSession(priors, picks);
+        // Nothing compared 3 times yet, so the "under-compared" rule wants every slot.
+        const candidates: Candidate[] = [...priors.keys()].map((id) => ({ id, rating: ratings.get(id)!, comparisons: 0 }));
+        const last = picks.at(-1)!;
+        const pair = choosePair(candidates, rng, { pair: [last.a, last.b] }, pendingReask(priors, picks))!;
+        asked = samePairAs(pair, 0, 1);
+        picks.push({ a: pair[0], b: pair[1], scoreA: trueRank[pair[0]] < trueRank[pair[1]] ? 1 : 0 });
+      }
+      expect(asked).toBe(true);
+    }
+  });
+
+  it('is not shown if one of the two is vetoed', () => {
+    const reask: Reask = { pair: [0, 1], picksSince: 4 };
+    const candidates: Candidate[] = [0, 1, 2, 3].map((id) => ({ id, rating: DEFAULT_RATING, comparisons: 5, vetoed: id === 1 }));
+    for (const seed of SEEDS) expect(choosePair(candidates, seededRandom(seed), undefined, reask)).not.toContain(1);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// #24: fair group ranking
+
+/** A person whose settled scores are given in place-id order. */
+const settledPerson = (scores: number[], vetoed: number[] = []): Candidate[] =>
+  scores.map((mu, id) => ({ id, rating: { mu, rd: 60 }, comparisons: 10, vetoed: vetoed.includes(id) }));
+const groupOrder = (people: Candidate[][]) => [...groupRanking(sampleGroup(people))].map(([id]) => id);
+
+describe('#24 AC1: each person counts equally', () => {
+  it('a place ranked #2 and #1 beats one ranked #1 and #3, even when one person spreads their scores far wider', () => {
+    const [X, Y] = [0, 1];
+    const wide = settledPerson([2600, 1600, 1500, 1400, 1300, 1200]); // X #1 by a mile, Y #2
+    const narrow = settledPerson([1500, 1800, 1650, 1350, 1200, 1050]); // Y #1, X #3
+    expect((2600 + 1500) / 2).toBeGreaterThan((1600 + 1800) / 2); // averaging scores would pick X
+    expect(groupOrder([wide, narrow])[0]).toBe(Y);
+    expect(groupOrder([wide, narrow])[1]).toBe(X);
+  });
+});
+
+describe('#24 AC2: no one hates it', () => {
+  it("with settled picks, a place in anyone's bottom third ranks below every place in nobody's", () => {
+    for (const seed of SEEDS) {
+      const rng = seededRandom(seed);
+      const shuffled = () => Array.from({ length: 9 }, (_, i) => 1000 + i * 150).sort(() => rng() - 0.5);
+      const people = Array.from({ length: 3 }, () => settledPerson(shuffled()));
+      const bottomThird = (id: number) =>
+        people.some((p) => {
+          const position = rankSession(p).findIndex((c) => c.id === id) + 1;
+          return position > 9 - 3;
+        });
+      const order = groupOrder(people);
+      const lastLiked = Math.max(...order.map((id, i) => (bottomThird(id) ? -1 : i)));
+      const firstHated = order.findIndex(bottomThird);
+      if (firstHated >= 0 && lastLiked >= 0) expect(firstHated).toBeGreaterThan(lastLiked);
+    }
+  });
+});
+
+describe('#24 AC3: vetoes', () => {
+  it('vetoed places come last', () => {
+    const order = groupOrder([settledPerson([1900, 1500, 1400], [0]), settledPerson([1900, 1500, 1400])]);
+    expect(order.at(-1)).toBe(0);
+  });
+
+  it('if every place is vetoed by someone, the top pick has the fewest vetoes', () => {
+    // Place 3 is everyone's favourite but has two vetoes; places 0–2 have one each.
+    const people = [settledPerson([1500, 1400, 1300, 2000], [0, 3]), settledPerson([1500, 1400, 1300, 2000], [1, 3]), settledPerson([1500, 1400, 1300, 2000], [2])];
+    const ranking = groupRanking(sampleGroup(people));
+    const [top] = ranking.values();
+    expect(top.vetoes).toBe(1);
+    expect(groupOrder(people).at(-1)).toBe(3);
+  });
+});
+
+describe('#24 AC4: no jitter', () => {
+  it('the same ratings always give the same order and chances', () => {
+    const rng = seededRandom(3);
+    const people = Array.from({ length: 4 }, () => Array.from({ length: 12 }, (_, id): Candidate => ({ id, rating: { mu: 1500 + rng() * 50, rd: 300 }, comparisons: 1 })));
+    expect([...groupRanking(sampleGroup(people))]).toEqual([...groupRanking(sampleGroup(people))]);
+  });
+});
+
+describe('#24 AC6: fast enough', () => {
+  it('ranks 8 people × 40 places in under 200 ms', () => {
+    const rng = seededRandom(5);
+    const people = Array.from({ length: 8 }, () => Array.from({ length: 40 }, (_, id): Candidate => ({ id, rating: { mu: 1300 + rng() * 400, rd: 60 + rng() * 290 }, comparisons: 3 })));
+    groupRanking(sampleGroup(people)); // warm up
+    const start = performance.now();
+    groupRanking(sampleGroup(people));
+    expect(performance.now() - start).toBeLessThan(200);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// #26: questions that matter to the group
+
+/** A person's candidates from [mu, rd] per place id. */
+const personWith = (ratings: [number, number][]): Candidate[] => ratings.map(([mu, rd], id) => ({ id, rating: { mu, rd }, comparisons: 10 }));
+const isPair = (pair: [number, number] | null, x: number, y: number) => !!pair && [x, y].every((id) => pair.includes(id));
+
+describe('#26 AC1: each person gets the question that most changes the group\'s top pick', () => {
+  it("asks about the pair that decides the group's pick, not this person's own close call", () => {
+    // Me: my own top two (2, 3) are a close, uncertain call; I'm unsure about 0 vs 1 further down.
+    const me = personWith([[1600, 250], [1600, 250], [1900, 60], [1880, 200], [1400, 60], [1300, 60], [1200, 60], [1100, 60]]);
+    // The other person loves 0 and 1 about equally, and has 2 and 3 in their bottom third: those can't win.
+    const other = personWith([[1900, 60], [1880, 60], [1000, 60], [900, 60], [1700, 60], [1600, 60], [1500, 60], [1400, 60]]);
+    const group = sampleGroup([me, other]);
+
+    const asked = SEEDS.map((seed) => choosePair(me, seededRandom(seed), undefined, undefined, { group, me: 0 }));
+    expect(share(asked.map((pair) => isPair(pair, 0, 1)))).toBeGreaterThanOrEqual(0.8);
+  });
+});
+
+describe('#26 AC2: a pair this person has settled is not asked while another would tell the group more', () => {
+  it('skips my settled 0 vs 1, even though it decides the group pick for someone else', () => {
+    const me = personWith([[1800, 60], [1400, 60], [1700, 250], [1650, 250], [1300, 60], [1200, 60]]);
+    const other = personWith([[1800, 250], [1800, 250], [1500, 60], [1450, 60], [1000, 60], [900, 60]]);
+    const group = sampleGroup([me, other]);
+    const asked = SEEDS.map((seed) => choosePair(me, seededRandom(seed), undefined, undefined, { group, me: 0 }));
+    expect(share(asked.map((pair) => isPair(pair, 0, 1)))).toBeLessThan(0.1);
+  });
+});
+
+describe('#26 AC4: alone in a session', () => {
+  it('questions are exactly as before, so the #7 simulations (top 5 within 120 picks) still describe it', () => {
+    const me = personWith([[1600, 250], [1600, 250], [1900, 60], [1880, 200], [1400, 60], [1300, 60], [1200, 60], [1100, 60]]);
+    const group = sampleGroup([me]);
+    for (const seed of SEEDS) expect(choosePair(me, seededRandom(seed), undefined, undefined, { group, me: 0 })).toEqual(choosePair(me, seededRandom(seed)));
+  });
+});
+
+describe('#23: a real change of mind', () => {
+  // The #7 simulations have fixed tastes, so they only show what recency costs. Here a person with 10% stray taps
+  // changes their mind at pick 40: their true #10 becomes their favourite. Measured when the design was chosen:
+  // the new favourite reached #1 within 15 picks in 20% of runs, and never (within 60) in 24 of 60; with no
+  // fading, 12% and 37 of 60.
+  const CHANGE = 40;
+  function picksToNewFavourite(seed: number) {
+    const rng = seededRandom(seed);
+    const shuffle = seededRandom(seed * 7919);
+    const trueRank = Array.from({ length: 30 }, (_, i) => i).sort(() => shuffle() - 0.5);
+    const craving = trueRank.indexOf(9);
+    const priors = new Map(trueRank.map((_, id) => [id, 1500]));
+    const comparisons = trueRank.map(() => 0);
+    const picks: Pick[] = [];
+    for (let n = 1; n <= CHANGE + 60; n++) {
+      const ratings = estimateSession(priors, picks);
+      const candidates: Candidate[] = trueRank.map((_, id) => ({ id, rating: ratings.get(id)!, comparisons: comparisons[id] }));
+      if (n > CHANGE && rankSession(candidates)[0].id === craving) return n - CHANGE;
+      const last = picks.at(-1);
+      const [a, b] = choosePair(candidates, rng, last && { pair: [last.a, last.b] }, pendingReask(priors, picks))!;
+      const rank = (id: number) => (n > CHANGE && id === craving ? -1 : trueRank[id]);
+      const prefersA = rank(a) < rank(b) !== rng() < 0.1;
+      picks.push({ a, b, scoreA: prefersA ? 1 : 0 });
+      comparisons[a]++;
+      comparisons[b]++;
+    }
+    return Infinity;
+  }
+
+  it('the new favourite rises to #1 about as often as when the design was chosen', () => {
+    const results = Array.from({ length: 60 }, (_, i) => picksToNewFavourite(i + 1));
+    expect(results.filter((n) => n <= 15).length / 60).toBeGreaterThanOrEqual(0.15);
+    expect(results.filter((n) => n === Infinity).length).toBeLessThanOrEqual(30);
+  });
+}, 60_000);
+
+describe('#23 AC4: older picks do not lower certainty', () => {
+  it("a place's rd does not grow as unrelated picks pile up after its own", () => {
+    const priors = new Map([0, 1, 2, 3, 4, 5].map((id) => [id, 1500]));
+    const own: Pick[] = [
+      { a: 0, b: 1, scoreA: 1 },
+      { a: 0, b: 2, scoreA: 1 },
+      { a: 1, b: 2, scoreA: 1 },
+    ];
+    const unrelated: Pick[] = Array.from({ length: 20 }, (_, i): Pick => ({ a: 3 + (i % 3), b: 3 + ((i + 1) % 3), scoreA: 1 }));
+    const before = estimateSession(priors, own).get(0)!.rd;
+    const after = estimateSession(priors, [...own, ...unrelated]).get(0)!.rd;
+    expect(after).toBeLessThanOrEqual(before * 1.02);
+  });
+});

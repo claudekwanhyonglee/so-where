@@ -7,6 +7,7 @@ const placeLink = (hex: string, name: string) =>
 type Board = {
   people: { id: number; name: string; picks: number; ranking: { placeId: number; name: string; vetoed: boolean }[] }[];
   combined: { placeId: number; name: string; positions: Record<string, number>; bottomThirdFor: number[]; vetoedBy: number[] }[];
+  prettySure: boolean;
 };
 
 // Six places so "bottom third" is two places.
@@ -46,7 +47,7 @@ describe("#9 AC1: each person's ranking", () => {
 });
 
 describe('#9 AC2: combined ranking', () => {
-  it("orders by the average of everyone's scores, and each row shows every person's position", async () => {
+  it("orders by everyone's preferences (the fair rule since #24), and each row shows every person's position", async () => {
     const { alex, jo, board, prefer, idOf } = await setup();
     // Both love C; Alex then likes A, Jo then likes B.
     await prefer(alex, ['Invented C', 'Invented A', 'Invented B', 'Invented D', 'Invented E', 'Invented F'].map(idOf));
@@ -94,6 +95,117 @@ describe('#18 AC4: vetoed places go last', () => {
     const { combined } = await board();
     expect(combined.at(-1)!.name).toBe('Invented A');
     expect(combined.at(-2)!.name).toBe('Invented F');
+  });
+});
+
+describe('#24 AC3: when every place is vetoed by someone', () => {
+  it('the top pick is one with the fewest vetoes, and the most vetoed go last', async () => {
+    const { alex, jo, board, prefer, ids, sessionId, idOf } = await setup();
+    await prefer(alex, ids.slice(0, 6));
+    await prefer(jo, ids.slice(0, 6));
+    for (const name of ['Invented A', 'Invented B', 'Invented C']) await alex.post(`/api/sessions/${sessionId}/vetoes`, { placeId: idOf(name) });
+    for (const name of ['Invented A', 'Invented D', 'Invented E', 'Invented F']) await jo.post(`/api/sessions/${sessionId}/vetoes`, { placeId: idOf(name) });
+
+    const { combined } = await board();
+    expect(combined[0].vetoedBy).toHaveLength(1);
+    expect(combined.at(-1)!.name).toBe('Invented A');
+  });
+});
+
+describe('#24 AC4: no jitter between refreshes', () => {
+  it('gives the same order every time for the same answers', async () => {
+    const { alex, jo, board, ids, sessionId } = await setup();
+    // Few, conflicting answers, so the ratings are uncertain and a random draw would shuffle the order.
+    await alex.post(`/api/sessions/${sessionId}/picks`, { a: ids[0], b: ids[1], winner: ids[0] });
+    await jo.post(`/api/sessions/${sessionId}/picks`, { a: ids[0], b: ids[1], winner: ids[1] });
+    const first = (await board()).combined.map((r) => r.placeId);
+    for (let i = 0; i < 5; i++) expect((await board()).combined.map((r) => r.placeId)).toEqual(first);
+  });
+});
+
+describe('#24 AC5: recent sessions name the same top pick', () => {
+  it('as the leaderboard, including when every place is vetoed', async () => {
+    const { alex, jo, board, prefer, ids, sessionId } = await setup();
+    await prefer(alex, ids.slice(0, 6));
+    await prefer(jo, [ids[1], ids[0], ...ids.slice(2, 6)]);
+    const topPick = async () => (await (await alex.get('/api/sessions')).json())[0].topPick;
+    expect(await topPick()).toBe((await board()).combined[0].name);
+
+    for (const id of ids.slice(0, 3)) await alex.post(`/api/sessions/${sessionId}/vetoes`, { placeId: id });
+    for (const id of ids.slice(3, 6)) await jo.post(`/api/sessions/${sessionId}/vetoes`, { placeId: id });
+    expect(await topPick()).toBe((await board()).combined[0].name);
+  });
+});
+
+describe('#24 AC6: fast enough', () => {
+  it('computes the leaderboard for 8 people × 40 places in under 200 ms', async () => {
+    const ctx = testApp({ fetch: fakeFetch(fakeNominatim()) });
+    const people = [];
+    for (let i = 0; i < 8; i++) people.push(await signedInDevice(ctx.app, `Person ${i}`));
+    const ids: number[] = [];
+    for (let i = 0; i < 40; i++) ids.push((await (await people[0].post('/api/places', { url: placeLink(`c${i}`, `Invented ${i}`) })).json()).place.id);
+    const sessionId = (await (await people[0].post('/api/sessions', { setId: 'all' })).json()).id as string;
+    for (const [n, person] of people.entries()) {
+      await person.post(`/api/sessions/${sessionId}/join`);
+      for (let i = 0; i < 20; i++) await person.post(`/api/sessions/${sessionId}/picks`, { a: ids[(i + n) % 40], b: ids[(i * 7 + 3) % 40], winner: ids[(i + n) % 40] });
+    }
+    await people[0].get(`/api/sessions/${sessionId}/leaderboard`); // warm up
+
+    const start = performance.now();
+    const res = await people[0].get(`/api/sessions/${sessionId}/leaderboard`);
+    expect(performance.now() - start).toBeLessThan(200);
+    expect((await res.json()).combined).toHaveLength(40);
+  }, 60_000);
+});
+
+describe('#25: "Pretty sure"', () => {
+  it('AC1 + AC4: is only flagged once everyone has made 8 picks and the group clearly agrees', async () => {
+    const { alex, jo, board, prefer, ids, sessionId } = await setup();
+    // 4 consistent picks each: the same favourite, but too few picks.
+    for (const who of [alex, jo]) for (const loser of ids.slice(1, 5)) await who.post(`/api/sessions/${sessionId}/picks`, { a: ids[0], b: loser, winner: ids[0] });
+    expect((await board()).prettySure).toBe(false);
+
+    await prefer(alex, ids.slice(0, 6));
+    await prefer(jo, ids.slice(0, 6));
+    await prefer(alex, ids.slice(0, 6));
+    await prefer(jo, ids.slice(0, 6));
+    const settled = await board();
+    expect(settled.combined[0].placeId).toBe(ids[0]);
+    expect(settled.prettySure).toBe(true);
+  });
+
+  it('AC1 + AC4: is not flagged when the picks say little, however many there are', async () => {
+    const { alex, jo, board, ids, sessionId } = await setup();
+    for (const who of [alex, jo]) for (let i = 0; i < 10; i++) await who.post(`/api/sessions/${sessionId}/picks`, { a: ids[i % 6], b: ids[(i + 1) % 6], winner: null });
+    expect((await board()).prettySure).toBe(false);
+  });
+
+  it('AC1: a near-tie between two favourites still counts (agreed with the user: either is a right pick)', async () => {
+    const { alex, jo, board, prefer, ids } = await setup();
+    for (let i = 0; i < 2; i++) {
+      await prefer(alex, ids.slice(0, 6));
+      await prefer(jo, [ids[1], ids[0], ...ids.slice(2, 6)]); // the two favourites swapped
+    }
+    const data = await board();
+    expect(data.combined.slice(0, 2).map((r) => r.placeId).sort()).toEqual([ids[0], ids[1]].sort());
+    expect(data.prettySure).toBe(true);
+  });
+
+  it('AC4: the leaderboard carries no confidence number', async () => {
+    const { alex, board, prefer, ids } = await setup();
+    await prefer(alex, ids.slice(0, 6));
+    const data = await board();
+    expect(Object.keys(data).sort()).toEqual(['combined', 'people', 'prettySure']);
+    for (const row of data.combined) expect(Object.keys(row).sort()).toEqual(['bottomThirdFor', 'name', 'placeId', 'positions', 'suburb', 'vetoedBy']);
+  });
+
+  it('AC6: picking carries on normally afterwards', async () => {
+    const { alex, jo, board, prefer, ids, sessionId } = await setup();
+    for (let i = 0; i < 2; i++) for (const who of [alex, jo]) await prefer(who, ids.slice(0, 6));
+    expect((await board()).prettySure).toBe(true);
+    const res = await alex.post(`/api/sessions/${sessionId}/picks`, { a: ids[2], b: ids[3], winner: ids[2] });
+    expect(res.status).toBe(200);
+    expect((await res.json()).pair).toHaveLength(2);
   });
 });
 

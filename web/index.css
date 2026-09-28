@@ -51,6 +51,26 @@
   }
 }
 
+/* The "Pretty sure" flame flickers from its base; the core a little out of step. Reduced motion stops both (below). */
+.flame,
+.flame-core {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: flicker 1.3s ease-in-out infinite alternate;
+}
+.flame-core {
+  animation-duration: 0.9s;
+  animation-delay: -0.4s;
+}
+@keyframes flicker {
+  33% {
+    transform: scale(0.94, 1.07) skewX(-4deg);
+  }
+  66% {
+    transform: scale(1.04, 0.95) skewX(3deg);
+  }
+}
+
 :root {
   /* Height of the phone tab bar, so pages and toasts clear it. */
   --tabbar-h: calc(70px + env(safe-area-inset-bottom, 0px));

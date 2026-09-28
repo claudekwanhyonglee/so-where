@@ -5,7 +5,7 @@ import { Eyebrow } from './ui.tsx';
 
 type Person = { id: number; name: string; picks: number; ranking: { placeId: number; name: string; vetoed: boolean }[] };
 type Row = { placeId: number; name: string; suburb: string | null; positions: Record<string, number>; bottomThirdFor: number[]; vetoedBy: number[] };
-export type Board = { people: Person[]; combined: Row[] };
+export type Board = { people: Person[]; combined: Row[]; prettySure: boolean };
 
 const initial = (name: string) => name[0]?.toUpperCase() ?? '';
 
@@ -64,9 +64,7 @@ const listStyle = 'flex flex-col divide-y divide-divider overflow-hidden rounded
 function Together({ board, risers }: { board: Board; risers: ReadonlySet<number> }) {
   const showChips = board.people.length > 1;
   const nameOf = (id: number) => board.people.find((p) => p.id === id)?.name ?? '?';
-  const [first, ...others] = board.combined;
-  const top = first && first.vetoedBy.length === 0 ? first : undefined;
-  const rest = top ? others : board.combined;
+  const [top, ...rest] = board.combined; // when every place is vetoed, the top pick is one with the fewest vetoes
   const marked = showChips && board.combined.some((r) => r.bottomThirdFor.length > 0);
 
   return (
@@ -78,6 +76,8 @@ function Together({ board, risers }: { board: Board; risers: ReadonlySet<number>
               <Crown size={16} aria-hidden="true" /> Top pick
             </span>
             <h3 className="font-display text-2xl/[1.08]">{top.name}</h3>
+            {top.vetoedBy.length > 0 && <NopeStamp who={top.vetoedBy.map(nameOf).join(', ')} />}
+            {board.prettySure && <PrettySure />}
             <div className="flex items-center justify-between gap-2 text-[13px]">
               <span>{top.suburb}</span>
               {showChips && <Chips row={top} people={board.people} onMustard />}
@@ -181,6 +181,31 @@ function Chips({ row, people, onMustard = false }: { row: Row; people: Person[];
     </span>
   );
 }
+
+/** Shown once the app is confident of the group's pick. */
+function PrettySure() {
+  return (
+    <p className="flex items-center gap-1.5 text-[13px] font-extrabold">
+      <Flame />
+      {'Statistically "Pretty sure"'}
+    </p>
+  );
+}
+
+/** A flickering Poster-style flame: tomato with an ink outline, a mustard core. */
+const Flame = () => (
+  <svg viewBox="0 0 20 24" className="h-6 w-5 flex-none overflow-visible" aria-hidden="true" data-testid="flame">
+    <path
+      className="flame"
+      d="M10 1C12 6 18 9 18 15A8 8 0 0 1 2 15C2 11 5 9 6 5C7 8 8 9 9 9C9 6 9 4 10 1Z"
+      fill="var(--color-tomato)"
+      stroke="var(--color-ink)"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+    <path className="flame-core" d="M10 10C11 13 14 14 14 17.5A4 4 0 0 1 6 17.5C6 15.5 8 14 10 10Z" fill="var(--color-mustard)" />
+  </svg>
+);
 
 /** The "Absolutely not" mark: a rubber stamp. */
 export function NopeStamp({ who }: { who: string }) {

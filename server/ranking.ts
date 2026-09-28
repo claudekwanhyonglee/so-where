@@ -8,7 +8,7 @@
 // fit), with each place's history score as the starting belief, held only loosely (rd reset to 350). With no
 // picks yet, a session rating is the history score at low confidence; each pick then moves it a lot. Fitting all
 // picks together (rather than updating pick by pick) keeps the order consistent: if A beat B and B beat C, A
-// stays above C.
+// stays above C. Recent picks count a little more (see recencyWeights), but certainty counts every pick in full.
 
 export type Rating = { mu: number; rd: number };
 
@@ -52,7 +52,10 @@ function glicko(player: Rating, opponent: Rating, score: number): Rating {
   return { mu: player.mu + (Q / precision) * gj * (score - e), rd: Math.max(HISTORY_MIN_RD, Math.sqrt(1 / precision)) };
 }
 
-export const updateHistory = ([a, b]: [Rating, Rating], scoreA: Pick['scoreA']): [Rating, Rating] => [glicko(a, b, scoreA), glicko(b, a, 1 - scoreA)];
+/** The chance this person picks A over B, allowing for how unsure both ratings are. */
+const winChance = (a: Rating, b: Rating) => 1 / (1 + 10 ** ((-g(Math.hypot(a.rd, b.rd)) * (a.mu - b.mu)) / 400));
+
+export const updateHistory =([a, b]: [Rating, Rating], scoreA: Pick['scoreA']): [Rating, Rating] => [glicko(a, b, scoreA), glicko(b, a, 1 - scoreA)];
 
 // ---------------------------------------------------------------------------------------------
 // Session
@@ -62,31 +65,92 @@ export const updateHistory = ([a, b]: [Rating, Rating], scoreA: Pick['scoreA']):
  * Picks involving places not in `priors` (e.g. removed from the set) are ignored.
  */
 export function estimateSession(priors: Map<number, number>, picks: Pick[]): Map<number, Rating> {
-  const games = new Map<number, { opponent: number; score: number }[]>([...priors.keys()].map((id) => [id, []]));
-  for (const { a, b, scoreA } of picks) {
-    if (!priors.has(a) || !priors.has(b)) continue;
-    games.get(a)!.push({ opponent: b, score: scoreA });
-    games.get(b)!.push({ opponent: a, score: 1 - scoreA });
-  }
+  const games = new Map<number, { opponent: number; score: number; weight: number }[]>([...priors.keys()].map((id) => [id, []]));
+  const weights = recencyWeights(picks);
+  picks.forEach(({ a, b, scoreA }, i) => {
+    if (!priors.has(a) || !priors.has(b)) return;
+    games.get(a)!.push({ opponent: b, score: scoreA, weight: weights[i] });
+    games.get(b)!.push({ opponent: a, score: 1 - scoreA, weight: weights[i] });
+  });
 
   // Maximise the posterior one place at a time (Newton steps); it's concave, so this converges quickly.
   const priorPrecision = 1 / SESSION_START_RD ** 2;
   const mu = new Map(priors);
-  const precision = new Map<number, number>();
+  const beats = (id: number, opponent: number) => 1 / (1 + Math.exp(-Q * (mu.get(id)! - mu.get(opponent)!)));
   for (let sweep = 0; sweep < 25; sweep++) {
     for (const [id, list] of games) {
       let slope = -(mu.get(id)! - priors.get(id)!) * priorPrecision;
       let info = priorPrecision;
-      for (const { opponent, score } of list) {
-        const p = 1 / (1 + Math.exp(-Q * (mu.get(id)! - mu.get(opponent)!)));
-        slope += Q * (score - p);
-        info += Q * Q * p * (1 - p);
+      for (const { opponent, score, weight } of list) {
+        const p = beats(id, opponent);
+        slope += weight * Q * (score - p);
+        info += weight * Q * Q * p * (1 - p);
       }
       mu.set(id, mu.get(id)! + slope / info);
-      precision.set(id, info);
     }
   }
-  return new Map([...mu].map(([id, m]) => [id, { mu: m, rd: Math.max(SESSION_MIN_RD, 1 / Math.sqrt(precision.get(id) ?? priorPrecision)) }]));
+
+  // Certainty counts every pick in full, so older picks don't make a place look less explored.
+  const rd = (id: number) => {
+    const info = games.get(id)!.reduce((sum, { opponent }) => {
+      const p = beats(id, opponent);
+      return sum + Q * Q * p * (1 - p);
+    }, priorPrecision);
+    return Math.max(SESSION_MIN_RD, 1 / Math.sqrt(info));
+  };
+  return new Map([...mu].map(([id, m]) => [id, { mu: m, rd: rd(id) }]));
+}
+
+const SAME_PAIR_HALF_LIFE = 5; // later answers on the same pair
+const SESSION_HALF_LIFE_SHARE = 2; // the half-life is twice the picks so far, so the oldest pick keeps ~70% of its weight
+const MIN_SESSION_HALF_LIFE = 5;
+
+const pairKey = ({ a, b }: Pick) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+
+/**
+ * How much each pick counts. Recent picks count a little more than old ones, over a window that grows with the
+ * session, so evidence builds up rather than being forgotten. A pick counts much less once the same pair has
+ * been answered again, so the latest answer on a disputed pair wins.
+ */
+function recencyWeights(picks: Pick[]) {
+  const n = picks.length;
+  const halfLife = Math.max(MIN_SESSION_HALF_LIFE, SESSION_HALF_LIFE_SHARE * n);
+  const laterOnPair = new Map<string, number>();
+  const weights: number[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const later = laterOnPair.get(pairKey(picks[i])) ?? 0;
+    weights[i] = 0.5 ** ((n - 1 - i) / halfLife + later / SAME_PAIR_HALF_LIFE);
+    laterOnPair.set(pairKey(picks[i]), later + 1);
+  }
+  return weights;
+}
+
+/** A reversal the person should be asked about again. */
+export type Reask = { pair: [number, number]; picksSince: number };
+
+const REASK_WITHIN = 5; // pairs
+const SURPRISING = 0.25; // the model gave the new answer less than this chance
+
+/**
+ * The most recent reversal worth asking about again: the answer on a pair flipped, the model thought the new
+ * answer unlikely, and the pair hasn't been answered since. A flip on a close call isn't asked again (it's
+ * usually noise, and asking again just gets another coin-flip).
+ */
+export function pendingReask(priors: Map<number, number>, picks: Pick[]): Reask | undefined {
+  const winner = ({ a, b, scoreA }: Pick) => (scoreA === 1 ? a : scoreA === 0 ? b : undefined);
+  for (let r = picks.length - 1; r >= Math.max(0, picks.length - REASK_WITHIN); r--) {
+    const pick = picks[r];
+    const key = pairKey(pick);
+    if (picks.slice(r + 1).some((p) => pairKey(p) === key)) continue;
+    const previous = picks.slice(0, r).findLast((p) => pairKey(p) === key);
+    const [now, before] = [winner(pick), previous && winner(previous)];
+    if (now === undefined || before === undefined || now === before) continue;
+
+    const ratings = estimateSession(priors, picks.slice(0, r));
+    const [w, l] = [ratings.get(now), ratings.get(before)];
+    if (w && l && winChance(w, l) < SURPRISING) return { pair: [pick.a, pick.b], picksSince: picks.length - 1 - r };
+  }
+  return undefined;
 }
 
 /** An upset: the winner was rated below the loser going in. */
@@ -122,7 +186,7 @@ function pickWeighted<T>(items: T[], weight: (item: T) => number, rng: () => num
 
 /** How unsure we are which of two places this person prefers: highest when it's a coin flip. */
 function closeness(a: Rating, b: Rating) {
-  const p = 1 / (1 + 10 ** ((-g(Math.hypot(a.rd, b.rd)) * (a.mu - b.mu)) / 400));
+  const p = winChance(a, b);
   return p * (1 - p);
 }
 
@@ -135,12 +199,19 @@ const samePair = (x: [number, number], y?: [number, number]) => !!y && ((x[0] ==
  * 2. Challenge: after an upset, the winner takes on the current #1, so a surprise favourite rises fast.
  * 3. A fresh look: places not yet seen tonight are shown, each against a strong place, since cravings change.
  * 4. Some pairs go to whatever the engine is least sure about, however low its score.
- * 5. Otherwise, draw a plausible score for every place from its rating (Thompson sampling) and compare the
- *    closest-call neighbours near the top of that draw: that settles who's in the top 5, and their order.
+ * 5. A surprising reversal is asked again, so a third answer settles a stray tap versus a real change of mind.
+ *    It takes precedence over everything once it's been waiting 4 pairs, so it's always back within 5.
+ * 6. With others in the session, the pair whose answer is expected to tell us most about the group's top pick.
+ * 7. Otherwise (alone, or no answer of mine would change the group's pick), draw a plausible score for every
+ *    place from its rating (Thompson sampling) and compare the closest-call neighbours near the top of that
+ *    draw: that settles who's in the top 5, and their order.
  */
-export function choosePair(candidates: Candidate[], rng: () => number, last?: LastPick): [number, number] | null {
+export function choosePair(candidates: Candidate[], rng: () => number, last?: LastPick, reask?: Reask, group?: GroupView): [number, number] | null {
   const pool = candidates.filter((c) => !c.vetoed);
   if (pool.length < 2) return null;
+
+  const reaskable = reask && reask.pair.every((id) => pool.some((c) => c.id === id)) ? reask : undefined;
+  if (reaskable && reaskable.picksSince >= REASK_WITHIN - 1) return reaskable.pair;
 
   const draw = new Map(pool.map((c) => [c.id, c.rating.mu + c.rating.rd * normal(rng)]));
   const byDraw = (among: Candidate[]) => [...among].sort((a, b) => draw.get(b.id)! - draw.get(a.id)!);
@@ -177,6 +248,11 @@ export function choosePair(candidates: Candidate[], rng: () => number, last?: La
     return [first.id, closestDrawTo(first, pool).id];
   }
 
+  if (reaskable && reaskable.picksSince >= 1) return reaskable.pair;
+
+  const forTheGroup = group && group.group.samples[0]?.draws.length > 1 ? mostInformativePair(pool, group, last) : null;
+  if (forTheGroup) return forTheGroup;
+
   const drawn = byDraw(pool);
   const neighbours = drawn
     .slice(0, Math.min(THOMPSON_WINDOW - 1, drawn.length - 1))
@@ -185,4 +261,166 @@ export function choosePair(candidates: Candidate[], rng: () => number, last?: La
   if (neighbours.length === 0) return [drawn[0].id, drawn[1].id];
   const [a, b] = neighbours.reduce((best, pair) => (closeness(pair[0].rating, pair[1].rating) > closeness(best[0].rating, best[1].rating) ? pair : best));
   return [a.id, b.id];
+}
+
+// ---------------------------------------------------------------------------------------------
+// Group: "fair, no one hates it" (Masthoff's average without misery, on ranks)
+
+export const inBottomThird = (position: number, count: number) => position > count - Math.floor(count / 3);
+
+const GROUP_SAMPLES = 1000;
+const GROUP_SEED = 22; // fixed, so the same answers always give the same result
+
+/**
+ * One plausible version of the evening, indexed by place position (as in GroupSamples.placeIds): each person's
+ * drawn score for every place, and the fair-rule score that gives each place.
+ */
+export type GroupSample = { draws: Float64Array[]; scores: Float64Array };
+
+/** Many plausible versions of the evening. Only contenders (the places with the fewest vetoes, normally none) can be best. */
+export type GroupSamples = { placeIds: number[]; vetoes: Map<number, number>; contenders: number[]; samples: GroupSample[] };
+
+/** Draws everyone's scores from their ratings many times, and scores each place by the fair rule in each draw. */
+export function sampleGroup(people: Candidate[][]): GroupSamples {
+  const placeIds = people[0]?.map((c) => c.id) ?? [];
+  const position = new Map(placeIds.map((id, i) => [id, i]));
+  const byPosition = people.map((person) => [...person].sort((a, b) => position.get(a.id)! - position.get(b.id)!));
+  const vetoCounts = placeIds.map((_, i) => byPosition.filter((p) => p[i].vetoed).length);
+  const fewestVetoes = Math.min(...vetoCounts);
+  const rng = seededRandom(GROUP_SEED);
+  return {
+    placeIds,
+    vetoes: new Map(placeIds.map((id, i) => [id, vetoCounts[i]])),
+    contenders: placeIds.filter((_, i) => vetoCounts[i] === fewestVetoes),
+    samples: placeIds.length === 0 ? [] : Array.from({ length: GROUP_SAMPLES }, () => fairSample(byPosition, rng)),
+  };
+}
+
+/** The contender (by position) with the highest fair-rule score in one sample. */
+const bestPosition = ({ scores }: GroupSample, contenders: number[]) => contenders.reduce((top, i) => (scores[i] > scores[top] ? i : top));
+
+const NEAR_BEST = 0.1; // fair-rule points: a tenth of the way from someone's last place to their first
+const PRETTY_SURE = 0.8;
+const PRETTY_SURE_MIN_PICKS = 8; // each
+
+/**
+ * How sure we are that a place (normally the top pick) is a right choice: the share of samples in which it's
+ * as good as the best contender, give or take a near-tie. Asking for "exactly the best" instead stalls whenever
+ * two places are nearly tied for the group, however many picks people make.
+ */
+export function confidenceIn(placeId: number, { placeIds, contenders, samples }: GroupSamples) {
+  const me = placeIds.indexOf(placeId);
+  const rivals = contenders.map((id) => placeIds.indexOf(id)).filter((i) => i !== me);
+  const right = ({ scores }: GroupSample) => rivals.every((i) => scores[i] <= scores[me] + NEAR_BEST);
+  return samples.length ? samples.filter(right).length / samples.length : 0;
+}
+
+/** "Pretty sure": confident in the top pick, and everyone has had their say. */
+export const isPrettySure = (confidence: number, picksEach: number[]) => confidence >= PRETTY_SURE && picksEach.every((n) => n >= PRETTY_SURE_MIN_PICKS);
+
+/** The group's samples, and which of its people (by position) the next pair is for. */
+export type GroupView = { group: GroupSamples; me: number };
+
+const entropy = (counts: Int32Array, total: number) => {
+  let h = 0;
+  for (const n of counts) if (n > 0) h -= (n / total) * Math.log(n / total);
+  return h;
+};
+
+/**
+ * The pair (among places this person hasn't vetoed) whose answer is expected to tell us most about which place
+ * is the group's best: in each sample, this person's drawn scores say how they'd answer, so an answer splits
+ * the samples in two, and a good question leaves each half surer of the winner (expected information gain).
+ * A pair everyone's samples agree on (e.g. one this person has settled) splits nothing, so gains nothing.
+ * Null if no pair would tell us anything.
+ */
+function mostInformativePair(pool: Candidate[], { group, me }: GroupView, last?: LastPick): [number, number] | null {
+  const { placeIds, contenders, samples } = group;
+  const position = new Map(placeIds.map((id, i) => [id, i]));
+  const contenderPositions = contenders.map((id) => position.get(id)!);
+  const winners = samples.map((s) => bestPosition(s, contenderPositions));
+  const winnerSlot = new Map([...new Set(winners)].map((w, slot) => [w, slot]));
+  const slots = winners.map((w) => winnerSlot.get(w)!);
+  const before = entropy(Int32Array.from(winnerSlot.keys(), (w) => winners.filter((x) => x === w).length), samples.length);
+
+  let best: { pair: [number, number]; gain: number } | null = null;
+  const ids = pool.map((c) => c.id);
+  const mine = samples.map((s) => s.draws[me]);
+  const [prefersX, prefersY] = [new Int32Array(winnerSlot.size), new Int32Array(winnerSlot.size)];
+  for (let i = 0; i < ids.length; i++)
+    for (let j = i + 1; j < ids.length; j++) {
+      if (samePair([ids[i], ids[j]], last?.pair)) continue;
+      const [x, y] = [position.get(ids[i])!, position.get(ids[j])!];
+      prefersX.fill(0);
+      prefersY.fill(0);
+      let xCount = 0;
+      for (let s = 0; s < mine.length; s++) {
+        if (mine[s][x] > mine[s][y]) (prefersX[slots[s]]++, xCount++);
+        else prefersY[slots[s]]++;
+      }
+      const yCount = samples.length - xCount;
+      const after = (xCount * entropy(prefersX, xCount || 1) + yCount * entropy(prefersY, yCount || 1)) / samples.length;
+      const gain = before - after;
+      if (gain > (best?.gain ?? MIN_GAIN)) best = { pair: [ids[i], ids[j]], gain };
+    }
+  return best?.pair ?? null;
+}
+
+const MIN_GAIN = 1e-3; // nats; below this an answer wouldn't change what we know about the group's pick
+
+/** score: the place's average fair-rule score (its expected value); chance: how likely it is the group's best. */
+export type GroupStanding = { chance: number; score: number; vetoes: number };
+
+/**
+ * The group's ranking, best first. Ordered by vetoes (fewest first), then average score: the best evening on
+ * average, so a place someone probably dislikes pays for that in proportion. Ranking by chance of being best
+ * instead would favour divisive, uncertain places. The chance breaks ties.
+ */
+export function groupRanking({ placeIds, vetoes, contenders, samples }: GroupSamples): Map<number, GroupStanding> {
+  const contenderPositions = contenders.map((id) => placeIds.indexOf(id));
+  const wins = placeIds.map(() => 0);
+  const totals = placeIds.map(() => 0);
+  for (const sample of samples) {
+    wins[bestPosition(sample, contenderPositions)]++;
+    placeIds.forEach((_, i) => (totals[i] += sample.scores[i]));
+  }
+  const standings = placeIds.map((id, i): [number, GroupStanding] => [id, { chance: wins[i] / samples.length, score: totals[i] / samples.length, vetoes: vetoes.get(id)! }]);
+  return new Map(standings.sort(([, a], [, b]) => a.vetoes - b.vetoes || b.score - a.score || b.chance - a.chance));
+}
+
+/**
+ * One draw of the fair rule: each person's rank among the places they haven't vetoed becomes a percentile
+ * (1 for their top place, 0 for their last); a place scores the average percentile, minus 1 for each person
+ * who has it in their bottom third. A veto counts as last and bottom third; that only decides anything when
+ * every place is vetoed by someone.
+ */
+function fairSample(people: Candidate[][], rng: () => number): GroupSample {
+  const scores = new Float64Array(people[0].length);
+  const draws = people.map((person, p) => {
+    const drawn = new Float64Array(person.length);
+    for (let i = 0; i < person.length; i++) drawn[i] = person[i].rating.mu + person[i].rating.rd * normal(rng);
+    const kept = keptPositions(people[p]);
+    // ponytail: rank by counting higher draws, O(n²) per person; faster than sorting for up to ~40 places.
+    for (const i of kept) {
+      let rank = 0;
+      for (const j of kept) if (drawn[j] > drawn[i] || (drawn[j] === drawn[i] && j < i)) rank++;
+      scores[i] += rankPoints(rank, kept.length, people.length);
+    }
+    for (let i = 0; i < person.length; i++) if (person[i].vetoed) scores[i] -= 1;
+    return drawn;
+  });
+  return { draws, scores };
+}
+
+/** The positions of the places a person hasn't vetoed (cached per person). */
+const keptCache = new WeakMap<Candidate[], number[]>();
+function keptPositions(person: Candidate[]) {
+  if (!keptCache.has(person)) keptCache.set(person, person.flatMap((c, i) => (c.vetoed ? [] : [i])));
+  return keptCache.get(person)!;
+}
+
+/** A place's fair-rule points from one person who ranks it `rank` (0 = top) of `count`. */
+function rankPoints(rank: number, count: number, groupSize: number) {
+  const percentile = count > 1 ? (count - 1 - rank) / (count - 1) : 1;
+  return percentile / groupSize - (inBottomThird(rank + 1, count) ? 1 : 0);
 }
