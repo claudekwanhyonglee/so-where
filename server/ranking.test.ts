@@ -1,0 +1,284 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import {
+  choosePair,
+  DEFAULT_RATING,
+  estimateSession,
+  isUpset,
+  rankSession,
+  seededRandom,
+  SESSION_START_RD,
+  updateHistory,
+  type Candidate,
+  type LastPick,
+  type Pick,
+  type Rating,
+} from './ranking.ts';
+
+// ---------------------------------------------------------------------------------------------
+// A simulated person with a hidden true order, who always answers consistently with it.
+
+type SimPlace = Candidate & { history: Rating };
+type Chooser = (places: SimPlace[], rng: () => number, last?: LastPick) => [number, number] | null;
+
+const randomPairing: Chooser = (places, rng) => {
+  const i = Math.floor(rng() * places.length);
+  let j = Math.floor(rng() * (places.length - 1));
+  if (j >= i) j++;
+  return [places[i].id, places[j].id];
+};
+
+/** `trueRank[id]` = the person's real preference tonight (0 = favourite). */
+function simulateSession(opts: {
+  trueRank: number[];
+  history?: (id: number) => { rating: Rating; comparisons: number };
+  chooser: Chooser;
+  picks: number;
+  seed: number;
+  onPick?: (pickNo: number, places: SimPlace[], pair: [number, number]) => void;
+}) {
+  const rng = seededRandom(opts.seed);
+  const places: SimPlace[] = opts.trueRank.map((_, id) => {
+    const h = opts.history?.(id) ?? { rating: DEFAULT_RATING, comparisons: 0 };
+    return { id, rating: { mu: h.rating.mu, rd: SESSION_START_RD }, history: h.rating, comparisons: h.comparisons };
+  });
+  const priors = new Map(places.map((p) => [p.id, p.history.mu]));
+  const picks: Pick[] = [];
+  let last: LastPick | undefined;
+  for (let n = 1; n <= opts.picks; n++) {
+    const pair = opts.chooser(places, rng, last)!;
+    const [a, b] = pair.map((id) => places[id]);
+    const aWins = opts.trueRank[a.id] < opts.trueRank[b.id];
+    const [winner, loser] = aWins ? [a, b] : [b, a];
+    last = { pair, winner: winner.id, upset: isUpset(winner.rating, loser.rating) };
+
+    picks.push({ a: a.id, b: b.id, scoreA: aWins ? 1 : 0 });
+    const session = estimateSession(priors, picks);
+    for (const p of places) p.rating = session.get(p.id)!;
+    [a.history, b.history] = updateHistory([a.history, b.history], aWins ? 1 : 0);
+    a.comparisons++;
+    b.comparisons++;
+    opts.onPick?.(n, places, pair);
+  }
+  return places;
+}
+
+const top = (places: Candidate[], k: number) => rankSession(places).slice(0, k).map((p) => p.id);
+const sameSet = (a: number[], b: number[]) => a.length === b.length && a.every((x) => b.includes(x));
+
+/** The pick number from which the engine's top 5 is (and stays) the true top 5; Infinity if it never settles. */
+function picksToFindTop5(chooser: Chooser, seed: number, maxPicks = 300) {
+  const shuffle = seededRandom(seed * 7919);
+  const trueRank = Array.from({ length: 30 }, (_, i) => i).sort(() => shuffle() - 0.5);
+  const trueTop5 = trueRank.map((rank, id) => ({ rank, id })).filter((p) => p.rank < 5).map((p) => p.id);
+  let settledFrom = Infinity;
+  simulateSession({
+    trueRank,
+    chooser,
+    picks: maxPicks,
+    seed,
+    onPick: (pick, places) => {
+      const right = sameSet(top(places, 5), trueTop5);
+      if (right && settledFrom === Infinity) settledFrom = pick;
+      if (!right) settledFrom = Infinity;
+    },
+  });
+  return settledFrom;
+}
+
+const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+const SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
+
+// ---------------------------------------------------------------------------------------------
+
+describe('#7 AC1: scores, confidence, picks and ties', () => {
+  // Place 1 starts below place 2.
+  const priors = new Map([
+    [1, 1500],
+    [2, 1600],
+    [3, 1300],
+  ]);
+  const start = estimateSession(priors, []);
+
+  it('every place has a score and a confidence', () => {
+    expect(start.get(1)).toEqual({ mu: 1500, rd: SESSION_START_RD });
+  });
+
+  it('a pick moves the winner up and the loser down, and both become more certain (session and history)', () => {
+    const after = estimateSession(priors, [{ a: 1, b: 2, scoreA: 1 }]);
+    expect(after.get(1)!.mu).toBeGreaterThan(1500);
+    expect(after.get(2)!.mu).toBeLessThan(1600);
+    expect(after.get(1)!.rd).toBeLessThan(SESSION_START_RD);
+    expect(after.get(2)!.rd).toBeLessThan(SESSION_START_RD);
+
+    const [a, b] = updateHistory([{ mu: 1500, rd: 200 }, { mu: 1600, rd: 200 }], 1);
+    expect(a.mu).toBeGreaterThan(1500);
+    expect(b.mu).toBeLessThan(1600);
+    expect(a.rd).toBeLessThan(200);
+  });
+
+  it('a tie moves the two scores toward each other (session and history)', () => {
+    const after = estimateSession(priors, [{ a: 1, b: 2, scoreA: 0.5 }]);
+    expect(after.get(1)!.mu).toBeGreaterThan(1500);
+    expect(after.get(2)!.mu).toBeLessThan(1600);
+    expect(after.get(1)!.mu).toBeLessThan(after.get(2)!.mu); // toward, not past
+
+    const [a, b] = updateHistory([{ mu: 1500, rd: 200 }, { mu: 1600, rd: 200 }], 0.5);
+    expect(a.mu).toBeGreaterThan(1500);
+    expect(b.mu).toBeLessThan(1600);
+    expect(a.mu).toBeLessThan(b.mu);
+  });
+
+  it('beating a stronger place is worth more than beating a weaker one', () => {
+    const vsStrong = estimateSession(priors, [{ a: 1, b: 2, scoreA: 1 }]).get(1)!.mu;
+    const vsWeak = estimateSession(priors, [{ a: 1, b: 3, scoreA: 1 }]).get(1)!.mu;
+    expect(vsStrong).toBeGreaterThan(vsWeak);
+  });
+
+  it('ignores picks for places no longer in the set', () => {
+    const after = estimateSession(new Map([[1, 1500]]), [{ a: 1, b: 99, scoreA: 1 }]);
+    expect(after.get(1)).toEqual({ mu: 1500, rd: SESSION_START_RD });
+  });
+});
+
+describe('#7 AC2: nothing is deprioritised before it has 3 comparisons', () => {
+  it('a place with fewer than 3 comparisons is always in the next pair, however low its score', () => {
+    const settled: Candidate[] = Array.from({ length: 29 }, (_, i) => ({ id: i, rating: { mu: 1800 - i * 10, rd: 60 }, comparisons: 10 }));
+    const newcomer: Candidate = { id: 99, rating: { mu: 1000, rd: 60 }, comparisons: 2 };
+    for (const seed of SEEDS) {
+      expect(choosePair([...settled, newcomer], seededRandom(seed))).toContain(99);
+    }
+  });
+
+  it('in a fresh session, every pair includes an under-compared place until all have 3', () => {
+    for (const seed of SEEDS.slice(0, 5)) {
+      const trueRank = Array.from({ length: 30 }, (_, i) => i);
+      let before: number[] = [];
+      simulateSession({
+        trueRank,
+        chooser: (places, rng, last) => {
+          before = places.map((p) => p.comparisons);
+          return choosePair(places, rng, last);
+        },
+        picks: 60,
+        seed,
+        onPick: (_, __, pair) => {
+          if (before.some((c) => c < 3)) expect(pair.some((id) => before[id] < 3)).toBe(true);
+        },
+      });
+    }
+  });
+});
+
+// The engine is randomised on purpose (it samples what to ask next), so the speed criteria are checked as rates
+// over many reproducible runs rather than "every run" (agreed with the user).
+const RUNS = Array.from({ length: 100 }, (_, i) => i + 1);
+const share = (xs: boolean[]) => xs.filter(Boolean).length / xs.length;
+
+describe('#7 AC3: finds the top 5 fast', () => {
+  // "Found" means the engine's top 5 is the true top 5 from that pick on, for the rest of a 300-pick run.
+  let engine: number[] = [];
+  let random: number[] = [];
+  beforeAll(() => {
+    engine = RUNS.map((seed) => picksToFindTop5(choosePair, seed));
+    random = SEEDS.map((seed) => picksToFindTop5(randomPairing, seed));
+  }, 120_000);
+
+  it("the true top 5 are the engine's top 5 within 120 picks (in at least 95% of runs)", () => {
+    expect(share(engine.map((n) => n <= 120))).toBeGreaterThanOrEqual(0.95);
+  });
+
+  it('on average in fewer picks than random pairing', () => {
+    const capped = (xs: number[]) => mean(xs.map((n) => Math.min(n, 300)));
+    expect(capped(engine)).toBeLessThan(capped(random));
+  });
+}, 120_000);
+
+describe('#7 AC4: places the engine is unsure about keep coming back', () => {
+  it('an uncertain low-scored place keeps being picked; an equally low but settled one is deprioritised', () => {
+    const settled: Candidate[] = Array.from({ length: 28 }, (_, i) => ({ id: i, rating: { mu: 1800 - i * 20, rd: 60 }, comparisons: 12 }));
+    const unsure: Candidate = { id: 100, rating: { mu: 1200, rd: 300 }, comparisons: 3 };
+    const sure: Candidate = { id: 101, rating: { mu: 1200, rd: 60 }, comparisons: 12 };
+    const PICKS = 200;
+    const shares = SEEDS.slice(0, 10).map((seed) => {
+      const rng = seededRandom(seed);
+      const count = { unsure: 0, sureOnItsOwn: 0 };
+      for (let i = 0; i < PICKS; i++) {
+        const pair = choosePair([...settled, unsure, sure], rng)!;
+        if (pair.includes(100)) count.unsure++;
+        else if (pair.includes(101)) count.sureOnItsOwn++; // chosen for itself, not as the unsure place's opponent
+      }
+      return { unsure: count.unsure / PICKS, sure: count.sureOnItsOwn / PICKS };
+    });
+    const fairShare = 2 / 30;
+    expect(mean(shares.map((s) => s.unsure))).toBeGreaterThanOrEqual(0.1);
+    expect(mean(shares.map((s) => s.unsure))).toBeGreaterThan(fairShare);
+    expect(mean(shares.map((s) => s.sure))).toBeLessThan(0.02);
+  });
+});
+
+describe('#7 AC5: sessions start from history with low confidence, and update history', () => {
+  const history: Rating = { mu: 1650, rd: 70 }; // well established
+
+  it('a session starts at the history score with confidence reset to low', () => {
+    const start = estimateSession(new Map([[1, history.mu]]), []);
+    expect(start.get(1)).toEqual({ mu: 1650, rd: SESSION_START_RD });
+    expect(SESSION_START_RD).toBeGreaterThan(history.rd * 4);
+  });
+
+  it('early session picks move the session score a lot more than the history, but both move', () => {
+    const priors = new Map([
+      [1, 1650],
+      [2, 1650],
+    ]);
+    const sessionMove = estimateSession(priors, [{ a: 1, b: 2, scoreA: 1 }]).get(1)!.mu - 1650;
+    const historyMove = updateHistory([history, { mu: 1650, rd: 70 }], 1)[0].mu - 1650;
+    expect(historyMove).toBeGreaterThan(0);
+    expect(sessionMove).toBeGreaterThan(historyMove * 3);
+  });
+});
+
+describe('#7 AC6: "Absolutely not"', () => {
+  it('is never offered again and ranks last, without touching ratings', () => {
+    const places: Candidate[] = Array.from({ length: 10 }, (_, i) => ({ id: i, rating: { mu: 1500 + i * 30, rd: 150 }, comparisons: 5 }));
+    places[9].vetoed = true; // the person's current favourite
+    const before = structuredClone(places);
+    const rng = seededRandom(7);
+    for (let i = 0; i < 300; i++) expect(choosePair(places, rng)).not.toContain(9);
+    expect(rankSession(places).at(-1)!.id).toBe(9);
+    expect(places).toEqual(before);
+  });
+
+  it('with fewer than two places left, there is no pair', () => {
+    const places: Candidate[] = [
+      { id: 1, rating: DEFAULT_RATING, comparisons: 0 },
+      { id: 2, rating: DEFAULT_RATING, comparisons: 0, vetoed: true },
+    ];
+    expect(choosePair(places, seededRandom(1))).toBeNull();
+  });
+});
+
+describe('#7 AC7: tonight\'s craving beats history', () => {
+  it('a place ranked #20 of 30 by history, preferred over everything tonight, reaches #1 within 30 picks (in at least 90% of runs)', () => {
+    const CRAVING = 19; // history rank #20
+    // History: places ordered by id, well established.
+    const history = (id: number) => ({ rating: { mu: 1800 - id * 20, rd: 70 }, comparisons: 15 });
+    // Tonight: the craving first, everything else as history says.
+    const trueRank = Array.from({ length: 30 }, (_, id) => (id === CRAVING ? -1 : id));
+
+    const reached = RUNS.map((seed) => {
+      let atTop = false;
+      simulateSession({
+        trueRank,
+        history,
+        chooser: choosePair,
+        picks: 30,
+        seed,
+        onPick: (_, places) => {
+          atTop ||= top(places, 1)[0] === CRAVING;
+        },
+      });
+      return atTop;
+    });
+    expect(share(reached)).toBeGreaterThanOrEqual(0.9);
+  });
+}, 60_000);
