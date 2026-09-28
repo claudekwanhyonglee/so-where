@@ -3,6 +3,7 @@ import type { Db } from './db.ts';
 export const USER_AGENT = 'so-where/0.1 (self-hosted restaurant ranker; https://github.com/claudekwanhyonglee/so-where)';
 
 export type LatLng = { lat: number; lng: number };
+export type BoundingBox = { west: number; north: number; east: number; south: number };
 
 /**
  * OpenStreetMap Nominatim, within its usage policy: an identifying User-Agent,
@@ -40,11 +41,16 @@ export function createNominatim(db: Db, fetchFn: typeof fetch, intervalMs: numbe
   }
 
   return {
-    search: (address: string): Promise<LatLng | null> =>
-      cached(`search:${address.trim().toLowerCase()}`, async () => {
-        const [hit] = (await get('/search', { q: address, limit: '1' })) as { lat: string; lon: string }[];
+    /** Free-text search. With `within`, only results inside that box count. */
+    search: (query: string, within?: BoundingBox): Promise<LatLng | null> => {
+      const box: Record<string, string> = within
+        ? { viewbox: [within.west, within.north, within.east, within.south].map((n) => n.toFixed(4)).join(','), bounded: '1' }
+        : {};
+      return cached(`search:${query.trim().toLowerCase()}|${box.viewbox ?? ''}`, async () => {
+        const [hit] = (await get('/search', { q: query, limit: '1', ...box })) as { lat: string; lon: string }[];
         return hit ? { lat: Number(hit.lat), lng: Number(hit.lon) } : null;
-      }),
+      });
+    },
 
     suburb: ({ lat, lng }: LatLng): Promise<string | null> =>
       cached(`suburb:${lat.toFixed(5)},${lng.toFixed(5)}`, async () => {

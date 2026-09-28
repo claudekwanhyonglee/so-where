@@ -54,8 +54,10 @@ export function device(app: App, { invited = true } = {}) {
     const headers: Record<string, string> = {
       cookie: [...jar].map(([k, v]) => `${k}=${v}`).join('; '),
     };
-    if (body !== undefined) headers['content-type'] = 'application/json';
-    const res = await app.request(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const isForm = body instanceof FormData;
+    if (body !== undefined && !isForm) headers['content-type'] = 'application/json';
+    const payload = body === undefined ? undefined : isForm ? body : JSON.stringify(body);
+    const res = await app.request(path, { method, headers, body: payload });
     for (const line of res.headers.getSetCookie()) {
       const [pair, ...attrs] = line.split(';');
       const [name, value] = pair.split('=');
@@ -73,6 +75,11 @@ export function device(app: App, { invited = true } = {}) {
     put: (path: string, body?: unknown) => request('PUT', path, body ?? {}),
     patch: (path: string, body?: unknown) => request('PATCH', path, body ?? {}),
     del: (path: string) => request('DELETE', path),
+    upload: (path: string, files: { name: string; content: string }[]) => {
+      const form = new FormData();
+      for (const f of files) form.append('files', new File([f.content], f.name));
+      return request('POST', path, form);
+    },
   };
 }
 

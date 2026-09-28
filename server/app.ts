@@ -3,7 +3,9 @@ import { Hono } from 'hono';
 import { authRoutes, inviteGate, requirePerson, type AppEnv } from './auth.ts';
 import type { Db } from './db.ts';
 import { createNominatim } from './nominatim.ts';
+import { createPlaceLookup } from './place-lookup.ts';
 import { placesRoutes } from './places.ts';
+import { importRoutes } from './takeout.ts';
 
 export type Config = {
   webRoot: string;
@@ -23,6 +25,7 @@ export type Deps = {
 export function createApp(deps: Deps) {
   const { db, config } = deps;
   const nominatim = createNominatim(db, deps.fetch, config.geocodeIntervalMs);
+  const placeLookup = createPlaceLookup(db, nominatim);
   const app = new Hono<AppEnv>();
 
   app.get('/health', (c) => c.json({ ok: true }));
@@ -31,10 +34,15 @@ export function createApp(deps: Deps) {
   app.route('/api', authRoutes(deps, nominatim));
   app.use('/api/*', requirePerson(db));
   app.route('/api/places', placesRoutes(deps, nominatim));
+  app.route('/api/import', importRoutes(deps, placeLookup));
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 
   app.use('/*', serveStatic({ root: config.webRoot }));
   app.get('*', serveStatic({ root: config.webRoot, path: 'index.html' }));
 
-  return app;
+  void placeLookup.start(); // resume lookups left over from before a restart
+
+  /** Resolves once background work (locating imported places) has finished. */
+  const idle = () => placeLookup.idle();
+  return Object.assign(app, { idle });
 }

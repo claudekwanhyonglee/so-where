@@ -33,6 +33,22 @@ export const migrations: string[] = [
      note TEXT NOT NULL DEFAULT '',
      created_at INTEGER NOT NULL
    );`,
+
+  // Imported places are located (coordinates, suburb) in the background: lookup_query is what to search for
+  // when coordinates are missing, and lookup_pending marks places not yet looked up.
+  `ALTER TABLE places ADD COLUMN lookup_pending INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE places ADD COLUMN lookup_query TEXT;
+   CREATE TABLE sets (
+     id INTEGER PRIMARY KEY,
+     name TEXT NOT NULL,
+     takeout_list TEXT UNIQUE,
+     created_at INTEGER NOT NULL
+   );
+   CREATE TABLE set_places (
+     set_id INTEGER NOT NULL REFERENCES sets(id) ON DELETE CASCADE,
+     place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+     PRIMARY KEY (set_id, place_id)
+   );`,
 ];
 
 export function migrate(db: Db, steps: string[] = migrations) {
