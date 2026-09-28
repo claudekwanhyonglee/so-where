@@ -1,0 +1,27 @@
+{
+  "enabledPlugins": {
+    "ticket-kit@ticket-kit": true
+  },
+  "extraKnownMarketplaces": {
+    "ticket-kit": {
+      "source": {
+        "source": "github",
+        "repo": "claudekwanhyonglee/ticketed-spec-driven-development-plugin"
+      }
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(gh repo view:*)",
+      "Bash(gh label list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh api repos/*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh project item-add:*)",
+      "Bash(claude --bg:*)"
+    ]
+  }
+}
