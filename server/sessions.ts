@@ -19,8 +19,10 @@ export const sessionMembers = (db: Db, sessionId: string) =>
     .prepare('SELECT p.id, p.name FROM session_members m JOIN people p ON p.id = m.person_id WHERE m.session_id = ? ORDER BY m.joined_at, p.id')
     .all(sessionId) as { id: number; name: string }[];
 
+/** Makes the person a member. Starting or joining a first session without having decided on a home counts as skipping it. */
 function join(db: Db, sessionId: string, personId: number, now: number) {
-  db.prepare('INSERT OR IGNORE INTO session_members (session_id, person_id, joined_at) VALUES (?, ?, ?)').run(sessionId, personId, now);
+  const { changes } = db.prepare('INSERT OR IGNORE INTO session_members (session_id, person_id, joined_at) VALUES (?, ?, ?)').run(sessionId, personId, now);
+  if (changes) db.prepare('UPDATE people SET home_skipped = 1 WHERE id = ? AND home_address IS NULL').run(personId);
 }
 
 /** Snapshots the person's history score for any set place they haven't met yet in this session. */

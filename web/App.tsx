@@ -7,10 +7,10 @@ import { Places } from './Places.tsx';
 import { SessionPage } from './Session.tsx';
 import { Profile } from './Profile.tsx';
 import { Link, usePath } from './router.tsx';
-import { SignIn } from './SignIn.tsx';
+import { SignIn, type SignedIn } from './SignIn.tsx';
 import { Avatar } from './ui.tsx';
 
-export type Me = { id: number; name: string; home: { address: string; lat: number; lng: number } | null };
+export type Me = { id: number; name: string; home: { address: string; lat: number; lng: number } | null; homeSkipped: boolean; guideClosed: boolean };
 
 function useMe() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
@@ -27,13 +27,18 @@ function useMe() {
 export function App() {
   const { me, refresh } = useMe();
   const path = usePath();
+  const homeSkippedOn = useHomeSkippedOn(path);
+  const signedIn: SignedIn = (how) => {
+    if (how?.skippedHome) homeSkippedOn.set(path);
+    refresh();
+  };
 
   return (
     <>
-      {me === null && <SignIn onSignedIn={refresh} />}
+      {me === null && <SignIn onSignedIn={signedIn} />}
       {me && (
         <Shell me={me}>
-          <Page path={path} me={me} refresh={refresh} />
+          <Page path={path} me={me} refresh={refresh} homeJustSkipped={homeSkippedOn.path === path} />
         </Shell>
       )}
       <Toaster position="bottom-center" offset={{ bottom: 'calc(var(--tabbar-h) + 16px)' }} mobileOffset={{ bottom: 'calc(var(--tabbar-h) + 16px)' }} />
@@ -41,13 +46,25 @@ export function App() {
   );
 }
 
-function Page({ path, me, refresh }: { path: string; me: Me; refresh: () => void }) {
+/**
+ * The page someone was on when they skipped the home step at sign-up (a session, if they came from a share link),
+ * so that session doesn't ask for a home again straight away. Forgotten as soon as they go elsewhere.
+ */
+function useHomeSkippedOn(path: string) {
+  const [skippedOn, set] = useState<string | null>(null);
+  useEffect(() => {
+    if (skippedOn !== null && skippedOn !== path) set(null);
+  }, [path, skippedOn]);
+  return { path: skippedOn, set };
+}
+
+function Page({ path, me, refresh, homeJustSkipped }: { path: string; me: Me; refresh: () => void; homeJustSkipped: boolean }) {
   if (path === '/you') return <Profile me={me} onChanged={refresh} onSignedOut={refresh} />;
   const places = path.match(/^\/places(?:\/([^/]+))?$/);
   if (places) return <Places setId={places[1]} />;
   const sessionId = path.match(/^\/s\/([\w-]+)$/)?.[1];
-  if (sessionId) return <SessionPage key={sessionId} id={sessionId} me={me} onHomeSaved={refresh} />;
-  return <Home me={me} />;
+  if (sessionId) return <SessionPage key={sessionId} id={sessionId} me={me} onHomeSaved={refresh} askForHome={me.home === null && !homeJustSkipped} />;
+  return <Home me={me} onMeChanged={refresh} />;
 }
 
 type NavItem = { to: string; label: string; icon: LucideIcon };

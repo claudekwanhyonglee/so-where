@@ -6,7 +6,7 @@ import type { Deps } from './app.ts';
 import type { Nominatim } from './nominatim.ts';
 import { hashPin, isValidPin, verifyPin } from './pin.ts';
 
-export type Person = { id: number; name: string; home_address: string | null; home_lat: number | null; home_lng: number | null };
+export type Person = { id: number; name: string; home_address: string | null; home_lat: number | null; home_lng: number | null; home_skipped: number; guide_closed: number };
 export type AppEnv = { Variables: { person: Person } };
 
 const INVITE_COOKIE = 'sw_invite';
@@ -56,7 +56,7 @@ export function currentPerson(db: Deps['db'], c: Context): Person | undefined {
   if (!token) return undefined;
   return db
     .prepare(
-      `SELECT p.id, p.name, p.home_address, p.home_lat, p.home_lng
+      `SELECT p.id, p.name, p.home_address, p.home_lat, p.home_lng, p.home_skipped, p.guide_closed
        FROM device_sessions s JOIN people p ON p.id = s.person_id WHERE s.token_hash = ?`,
     )
     .get(tokenHash(token)) as Person | undefined;
@@ -93,7 +93,7 @@ export function authRoutes({ db, config, now }: Deps, nominatim: Nominatim) {
     if (db.prepare('SELECT 1 FROM people WHERE name = ?').get(trimmed)) {
       return c.json({ error: `"${trimmed}" is taken. If that's you, sign in instead.` }, 409);
     }
-    const { lastInsertRowid } = db.prepare('INSERT INTO people (name, pin_hash) VALUES (?, ?)').run(trimmed, await hashPin(pin, config.pinPepper));
+    const { lastInsertRowid } = db.prepare('INSERT INTO people (name, pin_hash, created_at) VALUES (?, ?, ?)').run(trimmed, await hashPin(pin, config.pinPepper), now());
     signInDevice(c, Number(lastInsertRowid));
     return c.json({ id: Number(lastInsertRowid), name: trimmed }, 201);
   });
@@ -130,9 +130,15 @@ export function authRoutes({ db, config, now }: Deps, nominatim: Nominatim) {
   me.use(requirePerson(db));
 
   me.get('/', (c) => {
-    const { id, name, home_address, home_lat, home_lng } = c.var.person;
+    const { id, name, home_address, home_lat, home_lng, home_skipped, guide_closed } = c.var.person;
     const home = home_address === null ? null : { address: home_address, lat: home_lat, lng: home_lng };
-    return c.json({ id, name, home });
+    return c.json({ id, name, home, homeSkipped: !!home_skipped, guideClosed: !!guide_closed });
+  });
+
+  /** "Skip for now" on setting a home. */
+  me.post('/skip-home', (c) => {
+    db.prepare('UPDATE people SET home_skipped = 1 WHERE id = ?').run(c.var.person.id);
+    return c.json({ ok: true });
   });
 
   me.put('/pin', async (c) => {

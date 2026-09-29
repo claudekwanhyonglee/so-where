@@ -1,7 +1,7 @@
 import { Crown } from 'lucide-react';
 import { startTransition, useEffect, useRef, useState, ViewTransition } from 'react';
 import { plural } from './model.ts';
-import { Eyebrow } from './ui.tsx';
+import { Eyebrow, Stamp } from './ui.tsx';
 
 type Person = { id: number; name: string; picks: number; ranking: { placeId: number; name: string; vetoed: boolean }[] };
 type Row = { placeId: number; name: string; suburb: string | null; positions: Record<string, number>; bottomThirdFor: number[]; vetoedBy: number[] };
@@ -210,8 +210,6 @@ const Flame = () => (
 /** The "Absolutely not" mark: a rubber stamp. */
 export function NopeStamp({ who }: { who: string }) {
   return (
-    <span className="mt-[3px] inline-block -rotate-4 rounded-[5px] border-2 border-stamp px-[5px] text-[9px]/[1.5] font-extrabold tracking-[.12em] whitespace-nowrap text-stamp uppercase">
-      Absolutely not · {who}
-    </span>
+    <Stamp className="mt-[3px] text-stamp">Absolutely not · {who}</Stamp>
   );
 }

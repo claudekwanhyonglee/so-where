@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { authRoutes, inviteGate, requirePerson, type AppEnv } from './auth.ts';
 import type { Db } from './db.ts';
 import { createNominatim } from './nominatim.ts';
+import { guideRoutes } from './guide.ts';
 import { geocodeRoutes } from './photon.ts';
 import { createPlaceLookup } from './place-lookup.ts';
 import { placesRoutes } from './places.ts';
@@ -43,6 +44,7 @@ export function createApp(deps: Deps) {
   app.route('/api/sets', setsRoutes(deps));
   app.route('/api/sessions', sessionsRoutes(deps));
   app.route('/api/geocode', geocodeRoutes(deps));
+  app.route('/api/guide', guideRoutes(deps));
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 
   app.use('/*', serveStatic({ root: config.webRoot }));

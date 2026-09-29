@@ -62,7 +62,8 @@ test("#15 AC6: I'm new here → name → Continue → PIN (with the warning) cre
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText(PIN_WARNING)).toBeVisible();
   await pinInput(page).pressSequentially('4321');
-  await expect(page.getByRole('heading', { name: `Where to, ${name}?` })).toBeVisible();
+  await page.getByRole('button', { name: 'Skip for now' }).click(); // the home step (#37)
+  await expect(page.getByRole('heading', { name: `Pull up a chair, ${name}.` })).toBeVisible(); // new people get the guide (#38)
 
   // The new person can sign in with that PIN elsewhere.
   const res = await page.request.post('/api/signin', { data: { name, pin: '4321' } });

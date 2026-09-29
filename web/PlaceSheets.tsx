@@ -15,7 +15,7 @@ const createSet = (name: string) => api<{ id: number }>('/sets', { body: { name 
 const setMembership = (setId: number, placeId: number, member: boolean) => api(`/sets/${setId}/places/${placeId}`, { method: member ? 'PUT' : 'DELETE' });
 
 /** Add a place from its link, choosing its sets in the same sheet. */
-export function AddPlaceSheet({ named, into, open, close, reload }: SheetProps & { named: NamedSet[]; into?: NamedSet; open: (s: OpenSheet) => void }) {
+export function AddPlaceSheet({ named, into, open, close, reload }: SheetProps & { named: NamedSet[]; into?: NamedSet; open?: (s: OpenSheet) => void }) {
   const [url, setUrl] = useState('');
   const [note, setNote] = useState('');
   const [checked, setChecked] = useState<ReadonlySet<number>>(new Set(into ? [into.id] : []));
@@ -57,7 +57,7 @@ export function AddPlaceSheet({ named, into, open, close, reload }: SheetProps &
           {busy ? 'Adding…' : 'Add place'}
         </Button>
       </form>
-      {into && (
+      {into && open && (
         <Button variant="ghost" onClick={() => open({ kind: 'add-to-set', setId: into.id })}>
           Choose from places you've added
         </Button>
@@ -137,8 +137,8 @@ function describeImport({ added, existing, skipped, sets }: ImportReport) {
   return `${parts.join(', ')}.${newSets} Suburbs fill in over the next few minutes.`;
 }
 
-/** Google Takeout import: each saved list becomes a set, and the first one is shown. */
-export function ImportSheet({ close, reload }: SheetProps) {
+/** Google Takeout import: each saved list becomes a set, and the first one is shown (unless `showFirstSet` is false). */
+export function ImportSheet({ close, reload, showFirstSet = true }: SheetProps & { showFirstSet?: boolean }) {
   const [report, setReport] = useState<ImportReport | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -153,7 +153,7 @@ export function ImportSheet({ close, reload }: SheetProps) {
       const result = await api<ImportReport>('/import', { body: form });
       await reload();
       setReport(result);
-      if (result.sets[0]) navigate(`/places/${result.sets[0].id}`);
+      if (result.sets[0] && showFirstSet) navigate(`/places/${result.sets[0].id}`);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -169,7 +169,7 @@ export function ImportSheet({ close, reload }: SheetProps) {
             <Check size={18} className="flex-none" aria-hidden="true" />
             <span>{describeImport(report)}</span>
           </p>
-          <Button onClick={close}>See your sets</Button>
+          <Button onClick={close}>{showFirstSet ? 'See your sets' : 'Done'}</Button>
         </>
       ) : (
         <>
