@@ -2,14 +2,14 @@ import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from './api.ts';
 import type { Me } from './App.tsx';
-import { guideSteps, isFinished, isPassed, routeCount, type GuideState, type GuideStep, type StepId } from './guide-steps.ts';
+import { guideSteps, isFinished, isPassed, namesList, routeCount, type GuideState, type GuideStep, type StepId } from './guide-steps.ts';
 import { HomeSheet } from './HomeSheet.tsx';
 import { GuideHomeArt, GuidePickArt, GuidePlacesArt, SkipArrow, TramIcon } from './illustrations.tsx';
 import { plural } from './model.ts';
 import { AddPlaceSheet, ImportSheet } from './PlaceSheets.tsx';
 import { isNamed, useSets } from './Places.tsx';
 import { navigate } from './router.tsx';
-import { Button, Notice, Stamp, useSubmit } from './ui.tsx';
+import { Avatars, Button, Notice, Stamp, useSubmit } from './ui.tsx';
 import { usePolling } from './usePolling.ts';
 
 const GUIDE_POLL_MS = 3000; // steps done on another device show up without a reload
@@ -226,18 +226,45 @@ const STEP_CONTENT: Record<StepId, (step: GuideStep, state: GuideState, actions:
       ),
     };
   },
-  pick: (step, state, a) => ({
-    text: step.status === 'done' ? 'Your first session is going.' : "Tap whichever of two places you'd rather go to. Then share the link so friends can pick too.",
-    buttons:
-      step.status === 'done' ? null : state.placeCount >= 2 ? (
-        <Button variant="cream" onClick={a.startPicking}>
-          Start picking <ChevronRight size={18} aria-hidden="true" />
-        </Button>
-      ) : (
-        <span className="rounded-full bg-peach/20 px-[18px] py-[11px] font-bold text-peach/85">Add 2 places first</span>
-      ),
-  }),
+  pick: (step, state, a) => {
+    if (step.status === 'done') return { text: state.joinedWith ? pickingWith(state.joinedWith) : 'Your first session is going.' };
+    const { live } = state;
+    if (live) {
+      const names = namesList(live.members);
+      return {
+        text: `${names} ${live.members.length === 1 ? 'is' : 'are'} picking from ${live.setName} right now. Jump in, or start your own.`,
+        extra: (
+          <span className="flex items-center gap-2 text-xs font-bold">
+            <Avatars people={live.members} /> Picking now
+          </span>
+        ),
+        buttons: (
+          <>
+            <Button variant="cream" onClick={() => navigate(`/s/${live.id}`)}>
+              Join {names}
+            </Button>
+            <Button variant="glass" onClick={a.startPicking}>
+              Start your own
+            </Button>
+          </>
+        ),
+      };
+    }
+    return {
+      text: "Tap whichever of two places you'd rather go to. Then share the link so friends can pick too.",
+      buttons:
+        state.placeCount >= 2 ? (
+          <Button variant="cream" onClick={a.startPicking}>
+            Start picking <ChevronRight size={18} aria-hidden="true" />
+          </Button>
+        ) : (
+          <span className="rounded-full bg-peach/20 px-[18px] py-[11px] font-bold text-peach/85">Add 2 places first</span>
+        ),
+    };
+  },
 };
+
+const pickingWith = (people: { name: string }[]) => `You're picking with ${namesList(people)}.`;
 
 const AddHomeButton = ({ onClick }: { onClick: () => void }) => (
   <Button variant="cream" onClick={onClick}>
@@ -268,7 +295,7 @@ function AllSet({ steps, state, actions }: { steps: GuideStep[]; state: GuideSta
         </span>
       }
       title="You're all set!"
-      text={`Your first session is going. Share its link from the session page so friends can pick too.${homeless ? ' You skipped your home: add it to see travel times.' : ''}`}
+      text={`${state.joinedWith ? pickingWith(state.joinedWith) : 'Your first session is going. Share its link from the session page so friends can pick too.'}${homeless ? ' You skipped your home: add it to see travel times.' : ''}`}
       buttons={
         homeless ? (
           <>

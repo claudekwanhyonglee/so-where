@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { guideSteps, isFinished, routeCount, type GuideState } from './guide-steps.ts';
+import { guideSteps, isFinished, namesList, routeCount, type GuideState } from './guide-steps.ts';
 
-const fresh: GuideState = { closed: false, home: null, homeSkipped: false, placeCount: 0, inSession: false };
+const fresh: GuideState = { closed: false, home: null, homeSkipped: false, placeCount: 0, inSession: false, joining: false, live: null, joinedWith: null };
 const statuses = (g: GuideState) => guideSteps(g).map((s) => `${s.id}:${s.status}`);
 
 describe('#38 AC3: each step is done, current, skipped or coming up', () => {
@@ -41,5 +41,28 @@ describe('#38 AC5: finished once every step is done or skipped', () => {
 
   it('not while any step is undecided', () => {
     expect(isFinished(guideSteps({ ...fresh, placeCount: 2, inSession: true }))).toBe(false);
+  });
+});
+
+describe('#39 AC1: someone joining a group with places has no Places step', () => {
+  const joining = { ...fresh, joining: true, placeCount: 5 };
+
+  it('two steps: home, then picking', () => {
+    expect(statuses(joining)).toEqual(['home:current', 'pick:upcoming']);
+    expect(routeCount(guideSteps(joining))).toBe('0 of 2 done');
+  });
+
+  it('finishes after joining, with home skipped', () => {
+    const g = { ...joining, homeSkipped: true, inSession: true };
+    expect(isFinished(guideSteps(g))).toBe(true);
+    expect(routeCount(guideSteps(g))).toBe('1 of 2 done · 1 skipped');
+  });
+});
+
+describe('#39 AC3: names joined for reading', () => {
+  it('reads "Alex", "Alex and Jo", "Alex, Jo and Sam"', () => {
+    expect(namesList([{ name: 'Alex' }])).toBe('Alex');
+    expect(namesList([{ name: 'Alex' }, { name: 'Jo' }])).toBe('Alex and Jo');
+    expect(namesList([{ name: 'Alex' }, { name: 'Jo' }, { name: 'Sam' }])).toBe('Alex, Jo and Sam');
   });
 });

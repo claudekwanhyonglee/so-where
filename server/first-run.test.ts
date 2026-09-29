@@ -117,3 +117,118 @@ describe('#38 AC5: starting (or joining) a session with home undecided marks hom
     expect((await guide(laptop)).closed).toBe(true);
   });
 });
+
+const HOUR = 3_600_000;
+
+/** A test app whose clock the test moves on. */
+function clockedApp() {
+  const clock = { now: 1_800_000_000_000 };
+  const t = testApp({ fetch: fakeFetch(fakeNominatim()), now: () => clock.now });
+  return { ...t, clock, tick: (ms = 1000) => (clock.now += ms) };
+}
+
+describe('#39 AC1 + AC2: someone joining a group that already had 2 places', () => {
+  it('is joining when the group had 2 or more places before their account was made', async () => {
+    const { app, tick } = clockedApp();
+    const alex = await signedInDevice(app, 'Alex');
+    await addPlaces(alex, 2);
+    tick();
+    const jo = await signedInDevice(app, 'Jo');
+    expect((await guide(jo)).joining).toBe(true);
+  });
+
+  it('is not joining when the group had fewer, even once it has more (they may be the one adding them)', async () => {
+    const { app, tick } = clockedApp();
+    const alex = await signedInDevice(app, 'Alex');
+    await addPlaces(alex, 1);
+    tick();
+    const jo = await signedInDevice(app, 'Jo');
+    tick();
+    await addPlaces(jo, 2);
+    expect((await guide(jo)).joining).toBe(false);
+    expect((await guide(alex)).joining).toBe(false);
+  });
+
+  it('places added in the same instant as the account do not count as already there', async () => {
+    const { app } = clockedApp();
+    const alex = await signedInDevice(app, 'Alex');
+    await addPlaces(alex, 2);
+    const jo = await signedInDevice(app, 'Jo'); // same clock reading
+    expect((await guide(jo)).joining).toBe(false);
+  });
+});
+
+describe('#39 AC3 + AC4: the session that is going', () => {
+  async function groupWithPlaces() {
+    const t = clockedApp();
+    const alex = await signedInDevice(t.app, 'Alex');
+    await addPlaces(alex, 2);
+    t.tick();
+    return { ...t, alex };
+  }
+  const startSession = async (d: Awaited<ReturnType<typeof signedInDevice>>) => (await (await d.post('/api/sessions', { setId: 'all' })).json()).id as string;
+
+  it('is the most recent session from the last 12 hours with someone else in it, with its set and who is in it', async () => {
+    const { app, tick, alex } = await groupWithPlaces();
+    const sam = await signedInDevice(app, 'Sam');
+    await startSession(alex);
+    tick();
+    const latest = await startSession(alex);
+    tick();
+    await sam.get(`/api/sessions/${latest}`);
+    tick();
+    const jo = await signedInDevice(app, 'Jo');
+    expect((await guide(jo)).live).toEqual({ id: latest, setName: 'All places', members: [{ id: expect.any(Number), name: 'Alex' }, { id: expect.any(Number), name: 'Sam' }] });
+  });
+
+  it('is none when the only sessions are older than 12 hours', async () => {
+    const { app, tick, alex } = await groupWithPlaces();
+    await startSession(alex);
+    tick(12 * HOUR + 1);
+    const jo = await signedInDevice(app, 'Jo');
+    expect((await guide(jo)).live).toBeNull();
+  });
+
+  it("skips a session with only this person in it, and says none when there's nothing else", async () => {
+    const { app, tick, alex } = await groupWithPlaces();
+    tick();
+    const jo = await signedInDevice(app, 'Jo');
+    expect((await guide(jo)).live).toBeNull();
+    await startSession(jo);
+    expect((await guide(jo)).live).toBeNull();
+    const alexs = await startSession(alex);
+    expect((await guide(jo)).live).toMatchObject({ id: alexs });
+  });
+
+  it('is only offered to someone joining a group (a new group has no one else picking)', async () => {
+    const { app, tick } = clockedApp();
+    const alex = await signedInDevice(app, 'Alex');
+    const jo = await signedInDevice(app, 'Jo');
+    tick();
+    await addPlaces(alex, 2);
+    await startSession(alex);
+    expect(await guide(jo)).toMatchObject({ joining: false, live: null });
+  });
+});
+
+describe('#39 AC5: after joining, who they are picking with', () => {
+  it('names the others in the first session they joined', async () => {
+    const { app, tick } = clockedApp();
+    const alex = await signedInDevice(app, 'Alex');
+    await addPlaces(alex, 2);
+    const id = (await (await alex.post('/api/sessions', { setId: 'all' })).json()).id;
+    tick();
+    const jo = await signedInDevice(app, 'Jo');
+    expect((await guide(jo)).joinedWith).toBeNull();
+    await jo.get(`/api/sessions/${id}`);
+    expect((await guide(jo)).joinedWith).toEqual([{ id: expect.any(Number), name: 'Alex' }]);
+  });
+
+  it('is none when their first session was one they started', async () => {
+    const { app } = clockedApp();
+    const alex = await signedInDevice(app, 'Alex');
+    await addPlaces(alex, 2);
+    await alex.post('/api/sessions', { setId: 'all' });
+    expect((await guide(alex)).joinedWith).toBeNull();
+  });
+});
