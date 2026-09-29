@@ -44,7 +44,8 @@ export type TransitAnswer = { minutes: number } | { minutes: null; reason: 'no-h
 /** What a card shows for getting there: the time, a Directions link when there's no time, or nothing (still loading, or no home set). */
 export const transitPill = (answer: TransitAnswer | null) => (!answer ? null : answer.minutes !== null ? 'time' : answer.reason === 'no-home' ? null : 'directions');
 
-export const transitDirectionsUrl =(place: Pick<Place, 'lat' | 'lng' | 'name'>) => {
-  const destination = place.lat !== null && place.lng !== null ? `${place.lat},${place.lng}` : encodeURIComponent(place.name);
-  return `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=transit`;
-};
+/** Google Maps directions by public transport from `from` (the home address; else wherever the person is) to the place, by name and suburb. */
+export function transitDirectionsUrl(place: Pick<Place, 'name' | 'suburb' | 'lat' | 'lng'>, from?: string) {
+  const destination = place.suburb ? `${place.name}, ${place.suburb}` : place.lat !== null && place.lng !== null ? `${place.lat},${place.lng}` : place.name;
+  return `https://www.google.com/maps/dir/?${new URLSearchParams({ api: '1', ...(from && { origin: from }), destination, travelmode: 'transit' })}`;
+}

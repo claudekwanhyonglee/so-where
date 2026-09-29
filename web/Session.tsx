@@ -1,4 +1,4 @@
-import { Ban, ChevronLeft, Copy, ExternalLink, Share2, TramFront } from 'lucide-react';
+import { Ban, ChevronLeft, Copy, Map as MapIcon, Share2, TramFront } from 'lucide-react';
 import { startTransition, useCallback, useEffect, useRef, useState, ViewTransition } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError, errorMessage } from './api.ts';
@@ -35,11 +35,9 @@ export function SessionPage({ id, me, onHomeSaved, askForHome }: { id: string; m
     [],
   );
   if (deleted) return <SessionDeleted />;
-  // Cards look their transit time up again when home changes.
-  const homeKey = me.home ? `${me.home.lat},${me.home.lng}` : '';
   return (
     <>
-      <LiveSession id={id} meId={me.id} homeKey={homeKey} call={call} />
+      <LiveSession id={id} meId={me.id} home={me.home} call={call} />
       {askingForHome && <HomeSheet me={me} onSaved={onHomeSaved} close={() => setAskingForHome(false)} offerNotNow />}
     </>
   );
@@ -57,7 +55,7 @@ function SessionDeleted() {
   );
 }
 
-function LiveSession({ id, meId, homeKey, call }: { id: string; meId: number; homeKey: string; call: SessionApi }) {
+function LiveSession({ id, meId, home, call }: { id: string; meId: number; home: Me['home']; call: SessionApi }) {
   const info = usePolling(useCallback(() => call<SessionInfo>(`/sessions/${id}`), [id, call]), INFO_POLL_MS);
   // `version` changes whenever this device picks, so the board refreshes straight away too.
   const [version, setVersion] = useState(0);
@@ -97,7 +95,7 @@ function LiveSession({ id, meId, homeKey, call }: { id: string; meId: number; ho
       {info.members.length === 1 && <SoloBanner onShare={share} />}
       <div className="grid gap-5 desk:grid-cols-[minmax(0,1fr)_340px] desk:items-start">
         <div className={shownOnPhone('pick')}>
-          <Picker sessionId={id} homeKey={homeKey} call={call} onChanged={() => setVersion((v) => v + 1)} />
+          <Picker sessionId={id} home={home} call={call} onChanged={() => setVersion((v) => v + 1)} />
         </div>
         <div className={`desk:sticky desk:top-4 ${shownOnPhone('board')}`}>
           <Leaderboard board={board} />
@@ -196,7 +194,7 @@ const PICK_FEEDBACK_MS = 280;
 const TIE_FEEDBACK_MS = 120;
 const MILESTONES: Record<number, string> = { 10: '10 picks! Your top 3 is taking shape.', 25: '25 picks. You really care about dinner.' };
 
-function Picker({ sessionId, homeKey, call, onChanged }: { sessionId: string; homeKey: string; call: SessionApi; onChanged: () => void }) {
+function Picker({ sessionId, home, call, onChanged }: { sessionId: string; home: Me['home']; call: SessionApi; onChanged: () => void }) {
   const [state, setState] = useState<PairResponse | null>(null);
   const [chosen, setChosen] = useState<number | 'tie' | null>(null);
   const [error, setError] = useState('');
@@ -266,20 +264,16 @@ function Picker({ sessionId, homeKey, call, onChanged }: { sessionId: string; ho
         <>
           <ViewTransition key={`${pair[0].id}-${pair[1].id}-${state.picks}`} enter="pair-enter" exit="pair-exit">
             <div className="flex flex-col desk:flex-row">
-              <PlaceCard sessionId={sessionId} homeKey={homeKey} place={pair[0]} position="first" state={cardState(pair[0].id)} onPick={() => choose(pair[0].id)} onVeto={() => veto(pair[0])} />
+              <PlaceCard sessionId={sessionId} home={home} place={pair[0]} position="first" state={cardState(pair[0].id)} onPick={() => choose(pair[0].id)} onVeto={() => veto(pair[0])} />
               <span aria-hidden="true" className="pointer-events-none relative z-[2] -my-[17px] grid size-11 place-items-center self-center rounded-full bg-ink text-[13px] font-extrabold tracking-[.04em] text-mustard ring-[5px] ring-peach desk:-mx-[17px] desk:my-0">
                 OR
               </span>
-              <PlaceCard sessionId={sessionId} homeKey={homeKey} place={pair[1]} position="second" state={cardState(pair[1].id)} onPick={() => choose(pair[1].id)} onVeto={() => veto(pair[1])} />
+              <PlaceCard sessionId={sessionId} home={home} place={pair[1]} position="second" state={cardState(pair[1].id)} onPick={() => choose(pair[1].id)} onVeto={() => veto(pair[1])} />
             </div>
           </ViewTransition>
-          <div className="flex items-center justify-center gap-4">
-            <KeyHint keys={['←', '→']}>pick</KeyHint>
-            <Button variant="secondary" onClick={() => choose(null)}>
-              Too close to call
-            </Button>
-            <KeyHint keys={['↓']}>tie</KeyHint>
-          </div>
+          <Button variant="secondary" onClick={() => choose(null)} className="self-center">
+            Too close to call
+          </Button>
         </>
       ) : (
         <Card className="flex flex-col items-center gap-2.5 py-8 text-center">
@@ -314,17 +308,6 @@ function useDesktopPickKeys(actions: { left: () => void; right: () => void; tie:
   }, []);
 }
 
-const KeyHint = ({ keys, children }: { keys: string[]; children: string }) => (
-  <span className="hidden items-center gap-[5px] text-xs text-muted desk:inline-flex">
-    {keys.map((k) => (
-      <kbd key={k} className="rounded-[5px] bg-white px-1.5 py-[3px] text-[11px]/none font-bold shadow-[0_0_0_1px_var(--color-edge),0_1px_0_1px_var(--color-edge)]">
-        {k}
-      </kbd>
-    ))}
-    {children}
-  </span>
-);
-
 function useTransitTime(sessionId: string, placeId: number, homeKey: string) {
   const [answer, setAnswer] = useState<TransitAnswer | null>(null);
   useEffect(() => {
@@ -349,7 +332,7 @@ const cardMotion = {
 
 function PlaceCard({
   sessionId,
-  homeKey,
+  home,
   place,
   position,
   state,
@@ -357,15 +340,16 @@ function PlaceCard({
   onVeto,
 }: {
   sessionId: string;
-  homeKey: string;
+  home: Me['home'];
   place: CardPlace;
   position: 'first' | 'second';
   state: keyof typeof cardMotion;
   onPick: () => void;
   onVeto: () => void;
 }) {
-  const transit = useTransitTime(sessionId, place.id, homeKey);
+  const transit = useTransitTime(sessionId, place.id, home ? `${home.lat},${home.lng}` : ''); // looked up again when home changes
   const shown = transitPill(transit);
+  const directions = transitDirectionsUrl(place, home?.address);
   const { bg, fg } = swatch(place.id);
   const pill = fg === '#2a1712' ? 'bg-ink/10 hover:bg-ink/20' : 'bg-white/20 hover:bg-white/30';
   // On phones the OR badge sits on the seam, so the cards make room for it.
@@ -386,17 +370,17 @@ function PlaceCard({
         {place.note && <span className="text-sm italic opacity-90">“{place.note}”</span>}
         <div className="mt-auto flex flex-wrap gap-1.5 pt-2 [&>*]:inline-flex [&>*]:items-center [&>*]:gap-[5px] [&>*]:rounded-full [&>*]:px-[11px] [&>*]:py-[5px] [&>*]:text-[13px] [&>*]:font-bold [&>a]:pointer-events-auto">
           {shown === 'time' && (
-            <span className={pill} title="By public transport from home, leaving now">
+            <a href={directions} target="_blank" rel="noreferrer" className={pill} title="By public transport from home, leaving now. Opens directions in Google Maps.">
               <TramFront size={16} aria-hidden="true" /> {transit?.minutes} min
-            </span>
+            </a>
           )}
           {shown === 'directions' && (
-            <a href={transitDirectionsUrl(place)} target="_blank" rel="noreferrer" className={pill}>
+            <a href={directions} target="_blank" rel="noreferrer" className={pill}>
               <TramFront size={16} aria-hidden="true" /> Directions
             </a>
           )}
           <a href={googleMapsUrl(place)} target="_blank" rel="noreferrer" aria-label="Open in Google Maps" className={pill}>
-            <ExternalLink size={16} aria-hidden="true" /> Maps
+            <MapIcon size={16} aria-hidden="true" /> Maps
           </a>
         </div>
       </div>

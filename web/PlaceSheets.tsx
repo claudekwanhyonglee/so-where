@@ -1,4 +1,4 @@
-import { Check, ExternalLink, ListChecks, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
+import { Check, ListChecks, Map as MapIcon, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import { useState, type KeyboardEvent, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { api, errorMessage } from './api.ts';
@@ -467,7 +467,7 @@ export function PlaceActionsSheet({ place, from, named, close, reload }: SheetPr
             Edit note
           </ActionButton>
           <a href={googleMapsUrl(place)} target="_blank" rel="noreferrer" className={actionStyle}>
-            <ExternalLink size={18} aria-hidden="true" />
+            <MapIcon size={18} aria-hidden="true" />
             Open in Google Maps
           </a>
           {from && (
