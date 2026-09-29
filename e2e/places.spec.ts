@@ -18,7 +18,7 @@ test('#4 AC1 + AC3 + AC4 + AC5 + AC6: add, dedupe, edit and delete places', asyn
   const name = uniqueName('Pretend Diner ');
   const link = placeLink(name);
   await page.getByRole('button', { name: 'Add place', exact: true }).click();
-  await sheet(page).getByLabel('Google Maps link').fill(link);
+  await sheet(page).getByLabel('Name or Google Maps link').fill(link);
   await sheet(page).getByLabel('Note (optional)').fill('Ask for the back room');
   await sheet(page).getByRole('button', { name: 'Add place' }).click();
   await expect(sheet(page)).toBeHidden();
@@ -31,15 +31,15 @@ test('#4 AC1 + AC3 + AC4 + AC5 + AC6: add, dedupe, edit and delete places', asyn
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Add place', exact: true }).click();
-  await sheet(page).getByLabel('Google Maps link').fill(link);
+  await sheet(page).getByLabel('Name or Google Maps link').fill(link);
   await sheet(page).getByRole('button', { name: 'Add place' }).click();
   await expect(page.getByText(/already in the list/i)).toBeVisible();
   await expect(placeRow(page, name)).toHaveCount(1);
 
   await page.getByRole('button', { name: 'Add place', exact: true }).click();
-  await sheet(page).getByLabel('Google Maps link').fill('https://example.com/nope');
-  await sheet(page).getByRole('button', { name: 'Add place' }).click();
+  await sheet(page).getByLabel('Name or Google Maps link').fill('https://example.com/nope');
   await expect(sheet(page).getByText(/isn.t a google maps place link/i)).toBeVisible();
+  await expect(sheet(page).getByRole('button', { name: 'Add place' })).toBeDisabled(); // #44 AC3
   await page.keyboard.press('Escape');
 
   await openPlaceMenu(page, name);
@@ -151,21 +151,20 @@ test('#19 AC3 + AC4 + AC5: Add place picks its sets, can make a new one, and exp
   await expect(s.getByRole('checkbox', { name: unticked })).not.toBeChecked();
 
   // AC5: an invalid link gets an inline explanation, and no native validation bubble.
-  await s.getByLabel('Google Maps link').fill('not a link');
-  await s.getByRole('button', { name: 'Add place' }).click();
+  await s.getByLabel('Name or Google Maps link').fill('https://example.com/nope');
   await expect(s.getByRole('alert')).toContainText(/tap share and copy the link/i);
-  expect(await s.getByLabel('Google Maps link').evaluate((el: HTMLInputElement) => el.validationMessage)).toBe('');
+  expect(await s.getByLabel('Name or Google Maps link').evaluate((el: HTMLInputElement) => el.validationMessage)).toBe('');
 
   // AC4: a new set from the checklist is ticked, and what was typed stays.
   const name = uniqueName('Invented Bistro ');
   const url = placeLink(name);
-  await s.getByLabel('Google Maps link').fill(url);
+  await s.getByLabel('Name or Google Maps link').fill(url);
   await s.getByLabel('Note (optional)').fill('Window seat');
   const fresh = uniqueName('Birthday ');
   await s.getByLabel('New set name').fill(fresh);
   await s.getByRole('button', { name: 'Create' }).click();
   await expect(s.getByRole('checkbox', { name: fresh })).toBeChecked();
-  await expect(s.getByLabel('Google Maps link')).toHaveValue(url);
+  await expect(s.getByLabel('Name or Google Maps link')).toHaveValue(url);
   await expect(s.getByLabel('Note (optional)')).toHaveValue('Window seat');
 
   await s.getByRole('button', { name: 'Add place' }).click();

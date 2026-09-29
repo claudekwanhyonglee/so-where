@@ -3,7 +3,7 @@ import type { Deps } from './app.ts';
 import { isCoordinate, type AppEnv } from './auth.ts';
 import type { Db } from './db.ts';
 import { resolvePlaceLink, type ParsedPlace } from './google-maps.ts';
-import type { Nominatim } from './nominatim.ts';
+import type { LatLng, Nominatim } from './nominatim.ts';
 import { searchPlaces } from './photon.ts';
 import { groupCentre } from './place-lookup.ts';
 import { ALL_PLACES, setExists } from './sets.ts';
@@ -47,9 +47,16 @@ function searchResult({ key, name, lat, lng }: Record<string, unknown>): ParsedP
 
 const NOT_A_PLACE_LINK =
   "That isn't a Google Maps place link. In Google Maps, open the restaurant, tap Share and copy the link.";
+const CANT_LOCATE = "That link doesn't say where the place is. Open the restaurant in Google Maps and copy its link again, or search for it by name.";
 
 export function placesRoutes({ db, fetch, now }: Deps, nominatim: Nominatim) {
   const api = new Hono<AppEnv>();
+
+  /** Where a link's place is: its coordinates, or the address after its name in `q`. Never looked up from the name alone. */
+  const locate = async ({ lat, lng, query }: ParsedPlace): Promise<LatLng | null> => {
+    if (lat !== undefined && lng !== undefined) return { lat, lng };
+    return query?.includes(',') ? nominatim.search(query).catch(() => null) : null;
+  };
 
   /** Every place, each with the ids of the named sets it's in. */
   api.get('/', (c) => {
@@ -72,6 +79,14 @@ export function placesRoutes({ db, fetch, now }: Deps, nominatim: Nominatim) {
     }
   });
 
+  /** The name and location of the place a Google Maps link points to, to show before adding it. */
+  api.get('/link', async (c) => {
+    const parsed = await resolvePlaceLink(c.req.query('url') ?? '', fetch).catch(() => null);
+    if (!parsed) return c.json({ error: NOT_A_PLACE_LINK }, 400);
+    const located = parsed.name ? await locate(parsed) : null;
+    return located ? c.json({ name: parsed.name, ...located }) : c.json({ error: CANT_LOCATE }, 400);
+  });
+
   /**
    * Adds a place, into the named sets in `setIds` too ("All places" needs no asking): either a chosen search result
    * `{key, name, lat, lng}`, or `{url}`, a Google Maps link.
@@ -92,12 +107,10 @@ export function placesRoutes({ db, fetch, now }: Deps, nominatim: Nominatim) {
       return c.json({ place: existing, existing: true, message: `${existing.name} is already in the list.` });
     }
 
-    const located = parsed.lat !== undefined ? parsed : parsed.query ? await nominatim.search(parsed.query).catch(() => null) : null;
-    if (!parsed.name || !located) {
-      return c.json({ error: "That link doesn't say where the place is. Open the restaurant in Google Maps and copy its link again." }, 400);
-    }
+    const located = parsed.name ? await locate(parsed) : null;
+    if (!parsed.name || !located) return c.json({ error: CANT_LOCATE }, 400);
 
-    const place = await insertPlace(db, nominatim, now(), { key: parsed.key, name: parsed.name, lat: located.lat!, lng: located.lng!, note });
+    const place = await insertPlace(db, nominatim, now(), { key: parsed.key, name: parsed.name, ...located, note });
     addToSets(place.id);
     return c.json({ place }, 201);
   });

@@ -20,6 +20,11 @@ const externals = fakeFetch(
       properties: { housenumber: '1', street: 'Pretend Street', district: 'Carlton', city: 'Melbourne', state: 'Victoria', country: 'Australia' },
     },
     { lat: -37.85, lng: 144.99, properties: { housenumber: '5', street: 'Pretend Road', district: 'Windsor', city: 'Melbourne', state: 'Victoria', country: 'Australia' } },
+    {
+      lat: -37.7985,
+      lng: 144.967,
+      properties: { osm_type: 'N', osm_id: '9001', osm_key: 'amenity', osm_value: 'restaurant', name: 'Pretend Trattoria', housenumber: '7', street: 'Invented Street', district: 'Carlton', city: 'Melbourne' },
+    },
   ]),
   fakeTransitous([1500]), // every trip: 25 minutes
 );
