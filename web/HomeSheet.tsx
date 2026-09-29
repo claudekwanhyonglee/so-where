@@ -67,7 +67,7 @@ export function HomeAddressForm({ initial, hint, submitLabel, onSaved, children 
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
       <CountryField country={country} onPick={pickCountry} />
-      <Field ref={addressInput} label="Address" value={address} onChange={(e) => type(e.target.value)} autoComplete="off" disabled={!country} error={error} hint={hint} />
+      <Field ref={addressInput} label="Address" value={address} onChange={(e) => type(e.target.value)} autoComplete="off" disabled={!country} placeholder={country ? undefined : "Pick a country first"} error={error} hint={hint} />
       <p data-testid="address-status" role="status" aria-live="polite" className="sr-only">
         {lookupAnnouncement(lookup, 'addresses')}
       </p>

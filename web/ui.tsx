@@ -61,7 +61,7 @@ export function IconButton({ label, className = '', ...props }: { label: string 
   );
 }
 
-export const inputBox = 'rounded-2xl bg-white px-3.5 py-2.5 text-base ring-[1.5px] ring-edge outline-none focus:ring-2 focus:ring-tomato';
+export const inputBox = 'rounded-2xl bg-white px-3.5 py-2.5 text-base ring-[1.5px] ring-edge outline-none focus:ring-2 focus:ring-tomato disabled:bg-soft/60 disabled:placeholder:text-muted';
 
 export function Field({ label, hint, error, ...props }: { label: string; hint?: ReactNode; error?: string } & ComponentProps<'input'>) {
   const id = useId();
