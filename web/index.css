@@ -25,6 +25,11 @@
   --color-soft: #f6e6dc;
   --color-skip: #b07800;
   --color-track: #e2cfc4;
+  /* Medals on the together board: gold is --color-mustard. */
+  --color-silver: #e4e4e8;
+  --color-bronze: #f6d2b4;
+  --color-grey: #f1ebe7;
+  --color-grey-ink: #8a7a73;
 
   --animate-bob: bob 1.6s ease-in-out infinite;
   @keyframes bob {
@@ -85,6 +90,103 @@
   }
 }
 
+/* Together board: a changed rank's ▲/▼ badge pops on, holds and fades; a new 1st grows its flame. */
+.rank-badge {
+  animation: badge-pop 1.5s ease-out both;
+}
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  15% {
+    opacity: 1;
+    transform: none;
+  }
+  80% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.flame-in {
+  transform-origin: 50% 100%;
+  animation: flame-in 0.5s ease-out;
+}
+@keyframes flame-in {
+  from {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.4);
+  }
+}
+
+/* A new top pick: the old name moves up and out as the new one moves in from below. */
+.name-out {
+  animation: name-out 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.name-in {
+  animation: name-in 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+@keyframes name-out {
+  to {
+    transform: translateY(-110%);
+    opacity: 0;
+  }
+}
+@keyframes name-in {
+  from {
+    transform: translateY(110%);
+    opacity: 0;
+  }
+}
+
+/* "Pretty sure": the top card warms from the bottom, and a blaze rises from behind it past its top edge. */
+.on-fire {
+  background: linear-gradient(to top, #ff6a2e 0%, #ff9a3a 30%, var(--color-mustard) 65%, var(--color-mustard) 100%) 50% 100% / 100% 180%;
+  box-shadow: 0 12px 32px -8px rgba(232, 67, 44, 0.6);
+  animation: heat 2.2s ease-in-out infinite alternate;
+}
+@keyframes heat {
+  50% {
+    background-position: 50% 70%;
+  }
+  to {
+    background-position: 50% 88%;
+    box-shadow: 0 14px 38px -6px rgba(232, 67, 44, 0.8);
+  }
+}
+.blaze {
+  position: absolute;
+  z-index: 0;
+  top: -74px;
+  bottom: calc(100% - 36px);
+  left: 6px;
+  right: 6px;
+  pointer-events: none;
+}
+.blaze i {
+  position: absolute;
+  bottom: 0;
+  width: var(--s);
+  height: var(--s);
+  margin-left: calc(var(--s) / -2);
+  border-radius: 50%;
+  background: var(--c);
+  animation: rise var(--d) cubic-bezier(0.3, 0, 0.7, 1) var(--delay) infinite;
+}
+@keyframes rise {
+  85% {
+    opacity: 1;
+  }
+  to {
+    transform: translateY(calc(-1 * var(--h))) scale(0.1);
+    opacity: 0;
+  }
+}
+
 :root {
   /* Height of the phone tab bar, so pages and toasts clear it. */
   --tabbar-h: calc(70px + env(safe-area-inset-bottom, 0px));
@@ -118,5 +220,9 @@ h3 {
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation: none !important;
+  }
+  /* The fire holds still mid-blaze rather than vanishing behind the card. */
+  .blaze i {
+    animation: rise var(--d) cubic-bezier(0.3, 0, 0.7, 1) var(--delay) infinite paused !important;
   }
 }
