@@ -6,6 +6,13 @@ function required(env: NodeJS.ProcessEnv, name: string) {
   return value;
 }
 
+function maxSessions(env: NodeJS.ProcessEnv) {
+  const value = env.MAX_SESSIONS?.trim();
+  if (!value) return 20;
+  if (!/^[1-9]\d*$/.test(value)) throw new Error(`MAX_SESSIONS must be a whole number of at least 1 (got "${value}"). Fix it in .env or remove it to keep the default of 20.`);
+  return Number(value);
+}
+
 export function configFromEnv(env: NodeJS.ProcessEnv = process.env): Config & { port: number; databasePath: string } {
   return {
     port: Number(env.PORT ?? 3000),
@@ -14,5 +21,6 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): Config & { 
     inviteCode: required(env, 'INVITE_CODE'),
     pinPepper: required(env, 'PIN_PEPPER'),
     geocodeIntervalMs: 1100,
+    maxSessions: maxSessions(env),
   };
 }

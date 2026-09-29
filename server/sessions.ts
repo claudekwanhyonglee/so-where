@@ -130,6 +130,11 @@ function nextPair(db: Db, session: Session, personId: number) {
   return { pair: pair && pair.map((id) => cardPlace(db, id)), picks: pickCount };
 }
 
+/** Deletes every session beyond the newest `keep`; their members, picks, vetoes etc. go with them (ON DELETE CASCADE). */
+function pruneSessions(db: Db, keep: number) {
+  db.prepare('DELETE FROM sessions WHERE id NOT IN (SELECT id FROM sessions ORDER BY created_at DESC, rowid DESC LIMIT ?)').run(keep);
+}
+
 export function sessionsRoutes({ db, config, now, fetch }: Deps) {
   const api = new Hono<AppEnv>();
 
@@ -142,7 +147,7 @@ export function sessionsRoutes({ db, config, now, fetch }: Deps) {
   const notFound = (c: Context) => c.json({ error: 'No such session.' }, 404);
 
   api.get('/', (c) => {
-    const sessions = db.prepare('SELECT * FROM sessions ORDER BY created_at DESC LIMIT 20').all() as Session[];
+    const sessions = db.prepare('SELECT * FROM sessions ORDER BY created_at DESC, rowid DESC LIMIT ?').all(config.maxSessions) as Session[];
     return c.json(
       sessions.map((s) => {
         const members = sessionMembers(db, s.id);
@@ -166,6 +171,7 @@ export function sessionsRoutes({ db, config, now, fetch }: Deps) {
     const id = randomBytes(9).toString('base64url');
     db.prepare('INSERT INTO sessions (id, set_id, created_by, created_at) VALUES (?, ?, ?, ?)').run(id, setId === ALL_PLACES ? null : setId, c.var.person.id, now());
     join(db, id, c.var.person.id, now());
+    pruneSessions(db, config.maxSessions);
     return c.json({ id }, 201);
   });
 

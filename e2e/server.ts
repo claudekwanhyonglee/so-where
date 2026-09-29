@@ -17,7 +17,7 @@ const externals = fakeFetch(
 
 const app = createApp({
   db,
-  config: { webRoot: 'dist/web', inviteCode: INVITE, pinPepper: 'e2e-pepper', geocodeIntervalMs: 0 },
+  config: { webRoot: 'dist/web', inviteCode: INVITE, pinPepper: 'e2e-pepper', geocodeIntervalMs: 0, maxSessions: 1000 }, // high: parallel tests each start sessions
   fetch: externals,
   now: Date.now,
 });

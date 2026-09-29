@@ -48,6 +48,7 @@ export function testApp(opts: { fetch?: typeof fetch; now?: () => number; config
     inviteCode: INVITE,
     pinPepper: 'test-pepper',
     geocodeIntervalMs: 0,
+    maxSessions: 20,
     ...opts.config,
   };
   const deps: Deps = { db, config, fetch: opts.fetch ?? fakeFetch(), now: opts.now ?? Date.now };

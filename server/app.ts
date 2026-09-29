@@ -15,6 +15,8 @@ export type Config = {
   pinPepper: string;
   /** Minimum gap between Nominatim requests; its usage policy allows at most one per second. */
   geocodeIntervalMs: number;
+  /** How many sessions are kept; creating one beyond this deletes the oldest. */
+  maxSessions: number;
 };
 
 export type Deps = {
