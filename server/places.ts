@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
 import type { Deps } from './app.ts';
-import type { AppEnv } from './auth.ts';
+import { isCoordinate, type AppEnv } from './auth.ts';
 import type { Db } from './db.ts';
-import { resolvePlaceLink } from './google-maps.ts';
+import { resolvePlaceLink, type ParsedPlace } from './google-maps.ts';
 import type { Nominatim } from './nominatim.ts';
+import { searchPlaces } from './photon.ts';
+import { groupCentre } from './place-lookup.ts';
 import { ALL_PLACES, setExists } from './sets.ts';
 
 export type Place = {
@@ -36,6 +38,13 @@ export async function insertPlace(
   return getPlace(db, Number(lastInsertRowid))!;
 }
 
+/** A search result the client chose, if it's well formed. */
+function searchResult({ key, name, lat, lng }: Record<string, unknown>): ParsedPlace | null {
+  if (typeof key !== 'string' || !/^osm:[NWR]\d+$/.test(key)) return null;
+  if (typeof name !== 'string' || !name.trim() || !isCoordinate(lat, 90) || !isCoordinate(lng, 180)) return null;
+  return { key, name: name.trim(), lat, lng };
+}
+
 const NOT_A_PLACE_LINK =
   "That isn't a Google Maps place link. In Google Maps, open the restaurant, tap Share and copy the link.";
 
@@ -52,15 +61,30 @@ export function placesRoutes({ db, fetch, now }: Deps, nominatim: Nominatim) {
     return c.json(places.map((p) => ({ ...p, setIds: setIds.get(p.id) ?? [] })));
   });
 
-  /** Adds a place from its link, into the named sets in `setIds` too ("All places" needs no asking). */
+  /** Food and drink places matching `q`, favouring the area the group's places are in. */
+  api.get('/search', async (c) => {
+    const q = c.req.query('q')?.trim();
+    if (!q) return c.json([]);
+    try {
+      return c.json(await searchPlaces(fetch, q, groupCentre(db)));
+    } catch {
+      return c.json({ error: 'Place search is unavailable right now.' }, 502);
+    }
+  });
+
+  /**
+   * Adds a place, into the named sets in `setIds` too ("All places" needs no asking): either a chosen search result
+   * `{key, name, lat, lng}`, or `{url}`, a Google Maps link.
+   */
   api.post('/', async (c) => {
-    const { url, note, setIds = [] } = await c.req.json();
+    const body = await c.req.json();
+    const { note, setIds = [] } = body;
     const sets = (Array.isArray(setIds) ? setIds : []).filter((id) => id !== ALL_PLACES).map(Number);
     if (!sets.every((id) => Number.isInteger(id) && setExists(db, id))) return c.json({ error: 'No such set.' }, 404);
     const addToSets = (placeId: number) => sets.forEach((setId) => db.prepare('INSERT OR IGNORE INTO set_places (set_id, place_id) VALUES (?, ?)').run(setId, placeId));
 
-    const parsed = typeof url === 'string' ? await resolvePlaceLink(url, fetch).catch(() => null) : null;
-    if (!parsed) return c.json({ error: NOT_A_PLACE_LINK }, 400);
+    const parsed = 'key' in body ? searchResult(body) : typeof body.url === 'string' ? await resolvePlaceLink(body.url, fetch).catch(() => null) : null;
+    if (!parsed) return c.json({ error: 'key' in body ? 'Choose a place from the search results.' : NOT_A_PLACE_LINK }, 400);
 
     const existing = findPlaceByKey(db, parsed.key);
     if (existing) {
