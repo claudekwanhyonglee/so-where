@@ -1,16 +1,21 @@
-import { Plus } from 'lucide-react';
+import { Lock, Plus } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from './api.ts';
-import { Avatar, Button, Field, PinInput, PinWarning } from './ui.tsx';
+import { HomeAddressForm } from './HomeSheet.tsx';
+import { HomeTramScene } from './illustrations.tsx';
+import { Avatar, Button, Field, PinInput, PinWarning, useSubmit } from './ui.tsx';
 
 type Person = { id: number; name: string };
 
-type Step = { kind: 'who' } | { kind: 'pin'; person: Person } | { kind: 'new-name'; name: string } | { kind: 'new-pin'; name: string };
+type Step = { kind: 'who' } | { kind: 'pin'; person: Person } | { kind: 'new-name'; name: string } | { kind: 'new-pin'; name: string } | { kind: 'new-home' };
+
+/** `skippedHome`: a new person chose "Skip for now" on the home step. */
+export type SignedIn = (how?: { skippedHome: boolean }) => void;
 
 /** Someone who doesn't exist yet still gets a colour: the swatch the prototype used for newcomers. */
 const newcomer = (name: string): Person => ({ id: 3, name });
 
-export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
+export function SignIn({ onSignedIn }: { onSignedIn: SignedIn }) {
   const [people, setPeople] = useState<Person[]>([]);
   const [step, setStep] = useState<Step>({ kind: 'who' });
   const back = () => setStep({ kind: 'who' });
@@ -41,12 +46,14 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
           <PinInput
             onComplete={async (pin) => {
               await api('/people', { body: { name: step.name, pin } });
-              onSignedIn();
+              setStep({ kind: 'new-home' });
             }}
           />
           <PinWarning />
         </PinStep>
       );
+    case 'new-home':
+      return <NewHome onDone={(skippedHome) => onSignedIn({ skippedHome })} />;
   }
 }
 
@@ -139,6 +146,33 @@ function NewName({ initial, onContinue, onBack }: { initial: string; onContinue:
       <Button variant="ghost" onClick={onBack}>
         Back
       </Button>
+    </Screen>
+  );
+}
+
+/** Straight after a new person's PIN: their home, so places can show travel times. Skippable. */
+function NewHome({ onDone }: { onDone: (skippedHome: boolean) => void }) {
+  const skip = useSubmit(async () => {
+    await api('/me/skip-home', { body: {} });
+    onDone(true);
+  });
+  return (
+    <Screen top>
+      <div className="flex flex-col gap-3">
+        <HomeTramScene className="w-full max-w-[300px] self-center" />
+        <h1 className={screenTitle}>How far is dinner?</h1>
+        <p className="text-muted">Add your home so each place shows how long public transport takes from your door, leaving now.</p>
+      </div>
+      <HomeAddressForm submitLabel="Save home" onSaved={() => onDone(false)}>
+        <button type="button" disabled={skip.busy} onClick={() => skip.submit()} className="self-center font-bold text-muted underline underline-offset-3 hover:text-ink">
+          Skip for now
+        </button>
+        {skip.error && <p role="alert" className="text-center text-[13px] font-semibold text-stamp">{skip.error}</p>}
+        <p className="flex items-center justify-center gap-1.5 text-xs text-muted">
+          <Lock size={14} className="flex-none" aria-hidden="true" />
+          Only you see your address and travel times.
+        </p>
+      </HomeAddressForm>
     </Screen>
   );
 }

@@ -1,5 +1,5 @@
 import { MapPin } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { api } from './api.ts';
 import type { Me } from './App.tsx';
@@ -10,9 +10,36 @@ type Suggestion = { label: string; lat: number; lng: number };
 
 const SUGGEST_DELAY_MS = 300;
 
-/** Setting your home: address suggestions as you type, and a map of the one you choose. */
+/** Setting your home in a sheet: from the You page, and when a session asks. */
 export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me; onSaved: () => void; close: () => void; offerNotNow?: boolean }) {
-  const [address, setAddress] = useState(me.home?.address ?? '');
+  return (
+    <Sheet title="Home address" onClose={close}>
+      <HomeAddressForm
+        initial={me.home?.address}
+        hint="Used to show how long public transport takes from your place, leaving now. Only you see your travel times."
+        submitLabel="Save address"
+        onSaved={() => {
+          onSaved();
+          close();
+          toast('Home saved');
+        }}
+      >
+        {offerNotNow && (
+          <Button type="button" variant="ghost" onClick={close}>
+            Not now
+          </Button>
+        )}
+      </HomeAddressForm>
+    </Sheet>
+  );
+}
+
+/**
+ * The address field with suggestions as you type and a map of the one you choose, then the save button
+ * (and `children` under it). Used by the Home address sheet and the sign-up home step.
+ */
+export function HomeAddressForm({ initial = '', hint, submitLabel, onSaved, children }: { initial?: string; hint?: string; submitLabel: string; onSaved: () => void; children?: ReactNode }) {
+  const [address, setAddress] = useState(initial);
   const [query, setQuery] = useState(''); // what was typed; choosing a suggestion clears it
   const [chosen, setChosen] = useState<Suggestion | null>(null);
   const lookup = useAddressSuggestions(query);
@@ -21,8 +48,6 @@ export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me;
     const fromSuggestion = chosen?.label === address ? { lat: chosen.lat, lng: chosen.lng } : {};
     await api('/me/home', { method: 'PUT', body: { address, ...fromSuggestion } });
     onSaved();
-    close();
-    toast('Home saved');
   });
   const type = (text: string) => {
     setAddress(text);
@@ -36,53 +61,43 @@ export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me;
   };
 
   return (
-    <Sheet title="Home address" onClose={close}>
-      <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
-        <Field
-          label="Address"
-          value={address}
-          onChange={(e) => type(e.target.value)}
-          autoComplete="off"
-          autoFocus
-          error={error}
-          hint="Used to show how long public transport takes from your place, leaving now. Only you see your travel times."
-        />
-        <p data-testid="address-status" role="status" aria-live="polite" className="sr-only">
-          {lookupAnnouncement(lookup)}
-        </p>
-        {lookup.status === 'unavailable' && <Notice tone="info">Address suggestions are unavailable right now. You can still type your full address and save it.</Notice>}
-        {lookup.status !== 'idle' && lookup.status !== 'unavailable' && (
-          <ul aria-label="Suggestions" className="flex flex-col divide-y divide-divider overflow-hidden rounded-[18px] bg-white ring-1 ring-edge">
-            {lookup.status === 'searching' ? (
-              <li className="flex items-center gap-2.5 px-3.5 py-2.5 font-semibold text-muted">
-                <span data-testid="spinner" aria-hidden="true" className="size-4 flex-none animate-spin rounded-full border-2 border-soft border-t-tomato" />
-                Searching addresses…
-              </li>
-            ) : lookup.suggestions.length === 0 ? (
-              <li className="px-3.5 py-2.5 text-muted">No matching addresses</li>
-            ) : (
-              lookup.suggestions.map((s) => (
-                <li key={`${s.label}|${s.lat}|${s.lng}`}>
-                  <button type="button" onClick={() => choose(s)} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-[#fffaf6]">
-                    <MapPin size={16} className="flex-none text-muted" aria-hidden="true" />
-                    {s.label}
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        )}
-        {chosen && <MapPreview point={chosen} />}
-        <Button type="submit" disabled={busy}>
-          Save address
-        </Button>
-        {offerNotNow && (
-          <Button type="button" variant="ghost" onClick={close}>
-            Not now
-          </Button>
-        )}
-      </form>
-    </Sheet>
+    <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
+      <Field label="Address" value={address} onChange={(e) => type(e.target.value)} autoComplete="off" autoFocus error={error} hint={hint} />
+      <p data-testid="address-status" role="status" aria-live="polite" className="sr-only">
+        {lookupAnnouncement(lookup)}
+      </p>
+      {lookup.status === 'unavailable' && <Notice tone="info">Address suggestions are unavailable right now. You can still type your full address and save it.</Notice>}
+      {(lookup.status === 'searching' || lookup.status === 'found') && <SuggestionList lookup={lookup} onChoose={choose} />}
+      {chosen && <MapPreview point={chosen} />}
+      <Button type="submit" disabled={busy}>
+        {submitLabel}
+      </Button>
+      {children}
+    </form>
+  );
+}
+
+function SuggestionList({ lookup, onChoose }: { lookup: Extract<Lookup, { status: 'searching' | 'found' }>; onChoose: (s: Suggestion) => void }) {
+  return (
+    <ul aria-label="Suggestions" className="flex flex-col divide-y divide-divider overflow-hidden rounded-[18px] bg-white ring-1 ring-edge">
+      {lookup.status === 'searching' ? (
+        <li className="flex items-center gap-2.5 px-3.5 py-2.5 font-semibold text-muted">
+          <span data-testid="spinner" aria-hidden="true" className="size-4 flex-none animate-spin rounded-full border-2 border-soft border-t-tomato" />
+          Searching addresses…
+        </li>
+      ) : lookup.suggestions.length === 0 ? (
+        <li className="px-3.5 py-2.5 text-muted">No matching addresses</li>
+      ) : (
+        lookup.suggestions.map((s) => (
+          <li key={`${s.label}|${s.lat}|${s.lng}`}>
+            <button type="button" onClick={() => onChoose(s)} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-[#fffaf6]">
+              <MapPin size={16} className="flex-none text-muted" aria-hidden="true" />
+              {s.label}
+            </button>
+          </li>
+        ))
+      )}
+    </ul>
   );
 }
 

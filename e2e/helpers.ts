@@ -20,14 +20,24 @@ export const homePrompt = (page: Page) => page.getByRole('dialog', { name: 'Home
  */
 const skipHomePrompt = (page: Page) => page.addLocatorHandler(homePrompt(page), (prompt) => prompt.getByRole('button', { name: 'Not now' }).click());
 
-/** Signs up a new person from the sign-in screen that's already showing. */
-export async function signUpHere(page: Page, name: string, pin = '1234') {
-  await skipHomePrompt(page);
+/** The sign-up step asking for a home, right after the PIN (#37). */
+export const homeStep = (page: Page) => page.getByRole('main').filter({ has: page.getByRole('heading', { name: 'How far is dinner?' }) });
+
+/** From the sign-in screen that's already showing: name, then PIN, stopping at the home step. */
+export async function signUpToHomeStep(page: Page, name: string, pin = '1234') {
   await page.getByRole('button', { name: /i'm new/i }).click();
   await page.getByLabel('Your name').fill(name);
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText(PIN_WARNING)).toBeVisible();
   await page.getByLabel('4-digit PIN').fill(pin); // the 4th digit submits
+  await expect(homeStep(page)).toBeVisible();
+}
+
+/** Signs up a new person from the sign-in screen that's already showing, skipping the home step (most tests aren't about it). */
+export async function signUpHere(page: Page, name: string, pin = '1234') {
+  await skipHomePrompt(page);
+  await signUpToHomeStep(page, name, pin);
+  await homeStep(page).getByRole('button', { name: 'Skip for now' }).click();
   await expectSignedIn(page);
 }
 

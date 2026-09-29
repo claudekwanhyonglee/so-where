@@ -22,10 +22,10 @@ const BOARD_POLL_MS = 2000;
 /** `api` for calls about this session: a 404 means someone deleted it. */
 type SessionApi = <T>(path: string, init?: Parameters<typeof api>[1]) => Promise<T>;
 
-export function SessionPage({ id, me, onHomeSaved }: { id: string; me: Me; onHomeSaved: () => void }) {
+export function SessionPage({ id, me, onHomeSaved, askForHome }: { id: string; me: Me; onHomeSaved: () => void; askForHome: boolean }) {
   const [deleted, setDeleted] = useState(false);
   // Asked once per visit: "Not now" (or saving) closes it until they open a session again.
-  const [askingForHome, setAskingForHome] = useState(me.home === null);
+  const [askingForHome, setAskingForHome] = useState(askForHome);
   const call = useCallback(
     <T,>(path: string, init?: Parameters<typeof api>[1]) =>
       api<T>(path, init).catch((err: unknown) => {

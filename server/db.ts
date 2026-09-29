@@ -108,6 +108,13 @@ export const migrations: string[] = [
      minutes INTEGER,
      PRIMARY KEY (session_id, person_id, place_id)
    );`,
+
+  // First run: when each person joined (0 for people from before this), whether they skipped setting a home,
+  // and whether they closed the getting-started guide. Everyone already here has it closed.
+  `ALTER TABLE people ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE people ADD COLUMN home_skipped INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE people ADD COLUMN guide_closed INTEGER NOT NULL DEFAULT 0;
+   UPDATE people SET guide_closed = 1;`,
 ];
 
 export function migrate(db: Db, steps: string[] = migrations) {
