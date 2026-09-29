@@ -7,6 +7,7 @@ import type { Me } from './App.tsx';
 import { HomeSheet } from './HomeSheet.tsx';
 import { googleMapsUrl, plural, swatch, transitDirectionsUrl, transitPill, type TransitAnswer } from './model.ts';
 import { Link } from './router.tsx';
+import { joinedNews, vetoNews } from './session-news.ts';
 import { Avatar, Button, Card, DESKTOP_QUERY, Eyebrow, Notice, Sheet, inputBox } from './ui.tsx';
 import { usePolling } from './usePolling.ts';
 
@@ -60,6 +61,7 @@ function LiveSession({ id, meId, home, call }: { id: string; meId: number; home:
   // `version` changes whenever this device picks, so the board refreshes straight away too.
   const [version, setVersion] = useState(0);
   const board = usePolling(useCallback(() => call<Board>(`/sessions/${id}/leaderboard?v=${version}`), [id, version, call]), BOARD_POLL_MS);
+  useSessionNews(info, board, meId);
   const [view, setView] = useState<'pick' | 'board'>('pick');
   const [sharing, setSharing] = useState(false);
   if (!info) return null;
@@ -104,6 +106,22 @@ function LiveSession({ id, meId, home, call }: { id: string; meId: number; home:
       {sharing && <ShareSheet link={link} members={info.members} board={board} meId={meId} onClose={() => setSharing(false)} />}
     </>
   );
+}
+
+/** Toasts for who joins, and what others rule out or bring back, while you're here (not for what was so before). */
+function useSessionNews(info: SessionInfo | null, board: Board | null, meId: number) {
+  const members = useRef<Member[] | null>(null);
+  const rows = useRef<Board['combined'] | null>(null);
+  useEffect(() => {
+    if (!info) return;
+    joinedNews(members.current, info.members, meId).forEach((news) => toast(news));
+    members.current = info.members;
+  }, [info, meId]);
+  useEffect(() => {
+    if (!board) return;
+    vetoNews(rows.current, board.combined, board.people, meId).forEach((news) => toast(news));
+    rows.current = board.combined;
+  }, [board, meId]);
 }
 
 function SessionHeader({ info, onShare }: { info: SessionInfo; onShare: () => void }) {
