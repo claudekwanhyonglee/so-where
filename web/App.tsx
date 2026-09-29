@@ -37,7 +37,7 @@ export function App() {
     <>
       {me === null && <SignIn onSignedIn={signedIn} />}
       {me && (
-        <Shell me={me}>
+        <Shell me={me} fit={path.startsWith('/s/')}>
           <Page path={path} me={me} refresh={refresh} homeJustSkipped={homeSkippedOn.path === path} />
         </Shell>
       )}
@@ -82,12 +82,13 @@ function activeNav(path: string) {
   return '/';
 }
 
-function Shell({ me, children }: { me: Me; children: ReactNode }) {
+/** The app's frame. `fit`: exactly the screen's height, for a page that scrolls inside itself (the picking screen). */
+function Shell({ me, fit, children }: { me: Me; fit: boolean; children: ReactNode }) {
   const active = activeNav(usePath());
   return (
-    <div className="flex min-h-dvh flex-col pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
+    <div className={`flex flex-col pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] ${fit ? 'h-dvh' : 'min-h-dvh'}`}>
       <TopNav me={me} active={active} />
-      <main className="mx-auto flex w-full max-w-[1080px] flex-1 flex-col gap-4 px-[18px] pt-[18px] pb-[calc(var(--tabbar-h)+28px)] desk:gap-5 desk:px-8 desk:pt-7 desk:pb-10">
+      <main className="mx-auto flex min-h-0 w-full max-w-[1080px] flex-1 flex-col gap-4 px-[18px] pt-[18px] pb-[calc(var(--tabbar-h)+28px)] desk:gap-5 desk:px-8 desk:pt-7 desk:pb-10">
         {children}
       </main>
       <TabBar active={active} />
