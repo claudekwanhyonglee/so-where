@@ -21,7 +21,10 @@
       "Bash(gh api repos/*)",
       "Bash(gh pr create:*)",
       "Bash(gh project item-add:*)",
-      "Bash(claude --bg:*)"
+      "Bash(claude --bg:*)",
+      "Bash(gh project view:*)",
+      "Bash(gh project field-list:*)",
+      "Bash(gh project item-edit:*)"
     ]
   }
 }
