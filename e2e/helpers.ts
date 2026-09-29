@@ -1,4 +1,4 @@
-import { expect, type Browser, type Page } from '@playwright/test';
+import { expect, type Browser, type Locator, type Page } from '@playwright/test';
 
 export const INVITE = 'e2e-invite';
 
@@ -114,10 +114,19 @@ export async function stubMapTiles(page: Page) {
   return requested;
 }
 
-/** In the open Home address sheet: type, choose the suggestion, and save it. */
+/** In a home form: finds the country by typing and chooses it; the address box needs one first (#49). */
+export async function pickCountry(form: Locator, name = 'Australia') {
+  await form.getByLabel('Country', { exact: true }).fill(name.slice(0, 5));
+  await form.getByRole('button', { name, exact: true }).click();
+  await expect(form.getByLabel('Address')).toBeEnabled();
+}
+
+/** In the open Home address sheet: pick Australia if no country is picked yet, type, choose the suggestion, and save it. */
 export async function saveHomeFromSuggestion(page: Page) {
   await stubMapTiles(page);
   const sheet = page.getByRole('dialog', { name: 'Home address' });
+  await expect(sheet.getByLabel('Address')).toBeVisible();
+  if (await sheet.getByLabel('Address').isDisabled()) await pickCountry(sheet);
   await sheet.getByLabel('Address').fill('1 Pretend');
   await sheet.getByRole('button', { name: PRETEND_ST_SUGGESTION }).click();
   await sheet.getByRole('button', { name: 'Save address' }).click();

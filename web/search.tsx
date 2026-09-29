@@ -43,12 +43,14 @@ export function SuggestionList<T>({
   noun,
   keyOf,
   render,
+  icon = () => <MapPin size={16} className="flex-none text-muted" aria-hidden="true" />,
   onChoose,
 }: {
   lookup: Extract<Lookup<T[]>, { status: 'searching' | 'found' }>;
   noun: string;
   keyOf: (item: T) => string;
   render: (item: T) => ReactNode;
+  icon?: (item: T) => ReactNode;
   onChoose: (item: T) => void;
 }) {
   return (
@@ -64,7 +66,7 @@ export function SuggestionList<T>({
         lookup.value.map((item) => (
           <li key={keyOf(item)}>
             <button type="button" onClick={() => onChoose(item)} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-[#fffaf6]">
-              <MapPin size={16} className="flex-none text-muted" aria-hidden="true" />
+              {icon(item)}
               {render(item)}
             </button>
           </li>

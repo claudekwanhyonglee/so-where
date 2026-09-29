@@ -10,7 +10,7 @@ import { Link, usePath } from './router.tsx';
 import { SignIn, type SignedIn } from './SignIn.tsx';
 import { Avatar } from './ui.tsx';
 
-export type Me = { id: number; name: string; home: { address: string; lat: number; lng: number } | null; homeSkipped: boolean; guideClosed: boolean };
+export type Me = { id: number; name: string; home: { address: string; lat: number; lng: number; country: string | null } | null; homeSkipped: boolean; guideClosed: boolean };
 
 function useMe() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);

@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
   type ButtonHTMLAttributes,
   type FormEvent,
-  type InputHTMLAttributes,
+  type ComponentProps,
   type ReactNode,
 } from 'react';
 import { errorMessage } from './api.ts';
@@ -63,7 +63,7 @@ export function IconButton({ label, className = '', ...props }: { label: string 
 
 export const inputBox = 'rounded-2xl bg-white px-3.5 py-2.5 text-base ring-[1.5px] ring-edge outline-none focus:ring-2 focus:ring-tomato';
 
-export function Field({ label, hint, error, ...props }: { label: string; hint?: ReactNode; error?: string } & InputHTMLAttributes<HTMLInputElement>) {
+export function Field({ label, hint, error, ...props }: { label: string; hint?: ReactNode; error?: string } & ComponentProps<'input'>) {
   const id = useId();
   return (
     <div className="flex flex-col gap-1.5">
