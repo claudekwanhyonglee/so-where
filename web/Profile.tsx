@@ -3,7 +3,8 @@ import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { api } from './api.ts';
 import type { Me } from './App.tsx';
-import { Avatar, Button, Eyebrow, Field, PinInput, PinWarning, Sheet, useSubmit } from './ui.tsx';
+import { HomeSheet } from './HomeSheet.tsx';
+import { Avatar, Eyebrow, PinInput, PinWarning, Sheet } from './ui.tsx';
 
 export function Profile({ me, onChanged, onSignedOut }: { me: Me; onChanged: () => void; onSignedOut: () => void }) {
   const [sheet, setSheet] = useState<'home' | 'pin' | null>(null);
@@ -56,34 +57,6 @@ function Row({ icon, label, value, onClick }: { icon: ReactNode; label: string; 
       {value && <span className="max-w-[45%] truncate text-sm text-muted">{value}</span>}
       <ChevronRight size={18} aria-hidden="true" />
     </button>
-  );
-}
-
-function HomeSheet({ me, onSaved, close }: { me: Me; onSaved: () => void; close: () => void }) {
-  const [address, setAddress] = useState(me.home?.address ?? '');
-  const { submit, error, busy } = useSubmit(async () => {
-    await api('/me/home', { method: 'PUT', body: { address } });
-    onSaved();
-    close();
-    toast('Home saved');
-  });
-  return (
-    <Sheet title="Home address" onClose={close}>
-      <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
-        <Field
-          label="Address"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          autoComplete="street-address"
-          autoFocus
-          error={error}
-          hint="Used to show how long public transport takes from your place, leaving now. Only you see your travel times."
-        />
-        <Button type="submit" disabled={busy}>
-          Save address
-        </Button>
-      </form>
-    </Sheet>
   );
 }
 

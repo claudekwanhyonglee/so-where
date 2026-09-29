@@ -11,8 +11,18 @@ export async function signUp(page: Page, name: string, pin = '1234', path = '/')
   await signUpHere(page, name, pin);
 }
 
+/** The "set your home" prompt a session shows someone with no home (#33). */
+export const homePrompt = (page: Page) => page.getByRole('dialog', { name: 'Home address' }).filter({ has: page.getByRole('button', { name: 'Not now' }) });
+
+/**
+ * New people have no home, so every session they open prompts for one. Most tests aren't about that:
+ * whenever the prompt is in the way, press "Not now". Tests about the prompt remove this with `page.removeLocatorHandler(homePrompt(page))`.
+ */
+const skipHomePrompt = (page: Page) => page.addLocatorHandler(homePrompt(page), (prompt) => prompt.getByRole('button', { name: 'Not now' }).click());
+
 /** Signs up a new person from the sign-in screen that's already showing. */
 export async function signUpHere(page: Page, name: string, pin = '1234') {
+  await skipHomePrompt(page);
   await page.getByRole('button', { name: /i'm new/i }).click();
   await page.getByLabel('Your name').fill(name);
   await page.getByRole('button', { name: 'Continue' }).click();
@@ -64,6 +74,29 @@ export async function startPicking(page: Page, setName: string) {
   await page.getByRole('dialog').getByRole('radio', { name: setName }).click();
   await page.getByRole('button', { name: 'Start picking' }).click();
   await expect(page).toHaveURL(/\/s\/[\w-]+$/);
+}
+
+/** The home sheet's fake Photon suggestion for "1 Pretend" (see e2e/server.ts). */
+export const PRETEND_ST_SUGGESTION = '1 Pretend Street, Carlton, Melbourne, Victoria, Australia';
+
+/** Serves OpenStreetMap map tiles from a blank stub, so map previews never reach the network. Returns the tile URLs asked for. */
+export async function stubMapTiles(page: Page) {
+  const requested: string[] = [];
+  await page.context().route('https://tile.openstreetmap.org/**', (route) => {
+    requested.push(route.request().url());
+    return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"/>' });
+  });
+  return requested;
+}
+
+/** In the open Home address sheet: type, choose the suggestion, and save it. */
+export async function saveHomeFromSuggestion(page: Page) {
+  await stubMapTiles(page);
+  const sheet = page.getByRole('dialog', { name: 'Home address' });
+  await sheet.getByLabel('Address').fill('1 Pretend');
+  await sheet.getByRole('button', { name: PRETEND_ST_SUGGESTION }).click();
+  await sheet.getByRole('button', { name: 'Save address' }).click();
+  await expect(sheet).toBeHidden();
 }
 
 /** A fresh browser (as if another device) with a new person signed in. */

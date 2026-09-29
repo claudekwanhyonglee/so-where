@@ -1,10 +1,10 @@
-import { ChevronLeft, Ellipsis, Plus, Rows2, Upload } from 'lucide-react';
+import { ChevronLeft, Ellipsis, Plus, Upload } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api.ts';
-import { MIN_PLACES_TO_PICK, plural, type Place } from './model.ts';
+import { plural, type Place } from './model.ts';
 import { AddPlaceSheet, AddToSetSheet, ImportSheet, NewSetSheet, PlaceActionsSheet, SetActionsSheet } from './PlaceSheets.tsx';
-import { Link, navigate } from './router.tsx';
-import { Button, Card, Eyebrow, IconButton, Notice, PlaceTile, SetTile, useIsDesktop, useSubmit } from './ui.tsx';
+import { Link } from './router.tsx';
+import { Button, Card, Eyebrow, IconButton, Notice, PlaceTile, SetTile, useIsDesktop } from './ui.tsx';
 
 export type SetId = number | 'all';
 export type SetSummary = { id: SetId; name: string; builtIn: boolean; placeCount: number };
@@ -209,11 +209,6 @@ function SetCards({ sets, places, open }: { sets: SetSummary[]; places: PlaceWit
 
 function SetDetail({ set, places, sets, showBack, open }: { set: SetSummary; places: PlaceWithSets[]; sets: SetSummary[]; showBack: boolean; open: (s: OpenSheet) => void }) {
   const inSet = placesIn(set, places);
-  const addPlaces = () => open(isNamed(set) ? { kind: 'add-to-set', setId: set.id } : { kind: 'add-place' });
-  const start = useSubmit(async () => {
-    const { id } = await api<{ id: string }>('/sessions', { body: { setId: set.id } });
-    navigate(`/s/${id}`);
-  });
 
   return (
     <section aria-labelledby="set-title" className="flex min-w-0 flex-col gap-3.5">
@@ -241,17 +236,12 @@ function SetDetail({ set, places, sets, showBack, open }: { set: SetSummary; pla
         <EmptySet set={set} open={open} />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Button disabled={inSet.length < MIN_PLACES_TO_PICK || start.busy} onClick={() => start.submit()}>
-              <Rows2 size={18} aria-hidden="true" />
-              Start picking
-            </Button>
-            <Button variant="secondary" onClick={addPlaces}>
-              <Plus size={18} aria-hidden="true" />
-              Add places
-            </Button>
-          </div>
-          {start.error && <Notice tone="error">{start.error}</Notice>}
+          {isNamed(set) ? (
+            <AddButton onClick={() => open({ kind: 'add-to-set', setId: set.id })}>Add to set</AddButton>
+          ) : (
+            // All places uses the header's Add place, which phones don't show alongside the detail.
+            showBack && <AddButton onClick={() => open({ kind: 'add-place' })}>Add place</AddButton>
+          )}
           <ul aria-label={`Places in ${set.name}`} className="flex flex-col divide-y divide-divider overflow-hidden rounded-[22px] bg-white ring-1 ring-edge">
             {inSet.map((p) => (
               <PlaceRow key={p.id} place={p} otherSets={sets.filter((s) => isNamed(s) && s.id !== set.id && p.setIds.includes(s.id))} onMore={() => open({ kind: 'place-actions', placeId: p.id, setId: set.id })} />
@@ -262,6 +252,13 @@ function SetDetail({ set, places, sets, showBack, open }: { set: SetSummary; pla
     </section>
   );
 }
+
+const AddButton = ({ onClick, children }: { onClick: () => void; children: string }) => (
+  <Button variant="secondary" onClick={onClick} className="self-start">
+    <Plus size={18} aria-hidden="true" />
+    {children}
+  </Button>
+);
 
 function EmptySet({ set, open }: { set: SetSummary; open: (s: OpenSheet) => void }) {
   const into = isNamed(set) ? set.id : undefined;

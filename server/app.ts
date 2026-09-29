@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { authRoutes, inviteGate, requirePerson, type AppEnv } from './auth.ts';
 import type { Db } from './db.ts';
 import { createNominatim } from './nominatim.ts';
+import { geocodeRoutes } from './photon.ts';
 import { createPlaceLookup } from './place-lookup.ts';
 import { placesRoutes } from './places.ts';
 import { sessionsRoutes } from './sessions.ts';
@@ -15,6 +16,8 @@ export type Config = {
   pinPepper: string;
   /** Minimum gap between Nominatim requests; its usage policy allows at most one per second. */
   geocodeIntervalMs: number;
+  /** How many sessions are kept; creating one beyond this deletes the oldest. */
+  maxSessions: number;
 };
 
 export type Deps = {
@@ -39,6 +42,7 @@ export function createApp(deps: Deps) {
   app.route('/api/import', importRoutes(deps, placeLookup));
   app.route('/api/sets', setsRoutes(deps));
   app.route('/api/sessions', sessionsRoutes(deps));
+  app.route('/api/geocode', geocodeRoutes(deps));
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 
   app.use('/*', serveStatic({ root: config.webRoot }));

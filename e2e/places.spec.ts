@@ -75,9 +75,10 @@ test('#19 AC1: All places first, then every named set with its count, and New se
   }
 });
 
-test('#19 AC2: a set lists its places, with chips for their other sets, and starts picking', async ({ page }) => {
+// Picking from a set here moved to Home (#31); starting a session is covered in home.spec.ts.
+test('#19 AC2: a set lists its places, with chips for their other sets', async ({ page }) => {
   await signUp(page, uniqueName('Opener'));
-  const [a, b] = [await addPlaceViaApi(page, uniqueName('Invented Deli ')), await addPlaceViaApi(page, uniqueName('Invented Bar '))];
+  const a = await addPlaceViaApi(page, uniqueName('Invented Deli '));
   const [one, other] = [uniqueName('Lunch '), uniqueName('Late ')];
   const oneId = await newSetViaApi(page, one, [a.id]);
   await newSetViaApi(page, other, [a.id]);
@@ -86,13 +87,53 @@ test('#19 AC2: a set lists its places, with chips for their other sets, and star
   await expect(page.getByRole('heading', { name: one })).toBeVisible();
   await expect(placeRow(page, a.name)).toContainText(other);
   await expect(placeRow(page, a.name)).not.toContainText(one);
-  await expect(page.getByRole('button', { name: 'Start picking' })).toBeDisabled(); // 1 place
+});
 
-  await page.request.put(`/api/sets/${oneId}/places/${b.id}`);
-  await page.reload();
-  await page.getByRole('button', { name: 'Start picking' }).click();
-  await expect(page).toHaveURL(/\/s\/[\w-]+$/);
-  await expect(page.getByRole('heading', { name: one })).toBeVisible();
+const setDetail = (page: Page) => page.locator('section[aria-labelledby="set-title"]');
+
+test('#31 AC1: the Places page has no Start picking button, whichever set is selected, on phone or desktop', async ({ page }) => {
+  await signUp(page, uniqueName('NoStart'));
+  const [a, b] = [await addPlaceViaApi(page, uniqueName('Invented Pie ')), await addPlaceViaApi(page, uniqueName('Invented Stew '))];
+  const setName = uniqueName('Pickable ');
+  const setId = await newSetViaApi(page, setName, [a.id, b.id]);
+  for (const viewport of [DESKTOP, PHONE]) {
+    await page.setViewportSize(viewport);
+    for (const [path, heading] of [['/places/all', 'All places'], [`/places/${setId}`, setName]]) {
+      await page.goto(path);
+      await expect(setDetail(page).getByRole('heading', { name: heading })).toBeVisible();
+      await expect(page.getByRole('button', { name: /start picking/i })).toHaveCount(0);
+    }
+  }
+});
+
+test("#31 AC2: with All places selected, the header's Add place is the only add button", async ({ page }) => {
+  await signUp(page, uniqueName('OneAdd'));
+  await addPlaceViaApi(page, uniqueName('Invented Wrap '));
+  await page.setViewportSize(DESKTOP);
+  await page.goto('/places/all');
+  await expect(setDetail(page).getByRole('heading', { name: 'All places' })).toBeVisible();
+  await expect(setDetail(page).getByRole('button', { name: /add/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /add/i })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Add place', exact: true })).toBeVisible();
+
+  // A phone shows the detail without the header, so the detail carries the one Add place (agreed with the user).
+  await page.setViewportSize(PHONE);
+  await page.goto('/places/all');
+  await expect(setDetail(page).getByRole('heading', { name: 'All places' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /add/i })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Add place', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Add a place' })).toBeVisible();
+});
+
+test("#31 AC3: a named set's detail has an Add to set button that opens its add-to-set sheet", async ({ page }) => {
+  await signUp(page, uniqueName('AddTo'));
+  const a = await addPlaceViaApi(page, uniqueName('Invented Soup '));
+  const setName = uniqueName('Cosy ');
+  const setId = await newSetViaApi(page, setName, [a.id]);
+  await page.goto(`/places/${setId}`);
+  await expect(setDetail(page).getByRole('button', { name: 'Add places' })).toHaveCount(0);
+  await setDetail(page).getByRole('button', { name: 'Add to set', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: `Add to ${setName}` })).toBeVisible();
 });
 
 test('#19 AC3 + AC4 + AC5: Add place picks its sets, can make a new one, and explains bad links inline', async ({ page }) => {

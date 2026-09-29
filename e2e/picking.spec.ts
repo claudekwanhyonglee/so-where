@@ -22,12 +22,14 @@ const pickCount = (page: Page, n: number) => expect(page.getByRole('region', { n
 
 test('#17 AC1: cards show name, suburb, note, Maps link and directions; a place keeps its colour', async ({ page }) => {
   await signUp(page, uniqueName('Looker'));
+  // Directions show when no trip was found (#33 AC5: not when there's no home, which shows nothing).
+  await page.route('**/api/sessions/*/transit?*', (route) => route.fulfill({ json: { minutes: null, reason: 'no-trip' } }));
   const { places } = await openSession(page, 2);
 
   for (const card of await cards(page).all()) {
     await expect(card).toContainText('Carlton');
     await expect(card.getByRole('link', { name: /open in google maps/i })).toHaveAttribute('href', /maps\.google\.com\/\?cid=/);
-    await expect(card.getByRole('link', { name: /directions/i })).toHaveAttribute('href', /travelmode=transit/); // no home yet
+    await expect(card.getByRole('link', { name: /directions/i })).toHaveAttribute('href', /travelmode=transit/);
   }
   await expect(cards(page).filter({ hasText: places[0].name })).toContainText('Order the special');
 

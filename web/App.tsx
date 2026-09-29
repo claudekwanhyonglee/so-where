@@ -46,7 +46,7 @@ function Page({ path, me, refresh }: { path: string; me: Me; refresh: () => void
   const places = path.match(/^\/places(?:\/([^/]+))?$/);
   if (places) return <Places setId={places[1]} />;
   const sessionId = path.match(/^\/s\/([\w-]+)$/)?.[1];
-  if (sessionId) return <SessionPage key={sessionId} id={sessionId} meId={me.id} />;
+  if (sessionId) return <SessionPage key={sessionId} id={sessionId} me={me} onHomeSaved={refresh} />;
   return <Home me={me} />;
 }
 

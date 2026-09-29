@@ -434,7 +434,7 @@ function ActionButton({ icon, detail, danger = false, onClick, children }: { ico
   );
 }
 
-function Confirm({ question, action, busy, error, onConfirm, onCancel }: { question: ReactNode; action: string; busy: boolean; error: string; onConfirm: () => void; onCancel: () => void }) {
+export function Confirm({ question, action, busy, error, onConfirm, onCancel }: { question: ReactNode; action: string; busy: boolean; error: string; onConfirm: () => void; onCancel: () => void }) {
   return (
     <>
       <p>{question}</p>

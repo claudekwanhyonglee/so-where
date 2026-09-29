@@ -71,6 +71,9 @@ export const requirePerson =
     await next();
   };
 
+/** A latitude (limit 90) or longitude (limit 180) from a request body: a real, finite number within ±limit. */
+const isCoordinate = (value: unknown, limit: number): value is number => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= limit;
+
 export function authRoutes({ db, config, now }: Deps, nominatim: Nominatim) {
   const api = new Hono<AppEnv>();
 
@@ -139,9 +142,21 @@ export function authRoutes({ db, config, now }: Deps, nominatim: Nominatim) {
     return c.json({ ok: true });
   });
 
+  /** Either {address, lat, lng} from a chosen suggestion, stored as given, or just {address}, which is looked up. */
   me.put('/home', async (c) => {
-    const address = String((await c.req.json()).address ?? '').trim();
+    const body = await c.req.json();
+    const address = String(body.address ?? '').trim();
     if (!address) return c.json({ error: 'Enter an address.' }, 400);
+    const saveHome = (lat: number, lng: number) =>
+      db.prepare('UPDATE people SET home_address = ?, home_lat = ?, home_lng = ? WHERE id = ?').run(address, lat, lng, c.var.person.id);
+
+    if ('lat' in body || 'lng' in body) {
+      const { lat, lng } = body;
+      if (!isCoordinate(lat, 90) || !isCoordinate(lng, 180)) return c.json({ error: 'That location is out of range.' }, 400);
+      saveHome(lat, lng);
+      return c.json({ address, lat, lng });
+    }
+
     let found;
     try {
       found = await nominatim.search(address);
@@ -149,7 +164,7 @@ export function authRoutes({ db, config, now }: Deps, nominatim: Nominatim) {
       return c.json({ error: "Couldn't reach the address lookup. Try again in a moment." }, 502);
     }
     if (!found) return c.json({ error: "Couldn't find that address. Try adding the suburb." }, 422);
-    db.prepare('UPDATE people SET home_address = ?, home_lat = ?, home_lng = ? WHERE id = ?').run(address, found.lat, found.lng, c.var.person.id);
+    saveHome(found.lat, found.lng);
     return c.json({ address, ...found });
   });
 

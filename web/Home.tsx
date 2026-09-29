@@ -1,11 +1,13 @@
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { api } from './api.ts';
 import type { Me } from './App.tsx';
 import { MIN_PLACES_TO_PICK, plural, relativeDay } from './model.ts';
 import { Link, navigate } from './router.tsx';
+import { Confirm } from './PlaceSheets.tsx';
 import { useSets, type SetSummary } from './Places.tsx';
-import { Avatars, Button, Eyebrow, Notice, SetTile, Sheet, useSubmit } from './ui.tsx';
+import { Avatars, Button, Eyebrow, IconButton, Notice, SetTile, Sheet, useSubmit } from './ui.tsx';
 
 type RecentSession = { id: string; setId: number | null; setName: string; createdAt: number; members: { id: number; name: string }[]; topPick: string | null };
 
@@ -107,8 +109,14 @@ function SetChooser({ sets, chosenId, onChoose, onClose }: { sets: SetSummary[];
 
 function RecentSessions() {
   const [sessions, setSessions] = useState<RecentSession[]>([]);
+  const [deleting, setDeleting] = useState<RecentSession | null>(null);
   useEffect(() => void api<RecentSession[]>('/sessions').then(setSessions), []);
   if (sessions.length === 0) return null;
+  const deleted = (id: string) => {
+    setSessions((was) => was.filter((s) => s.id !== id));
+    setDeleting(null);
+    toast('Session deleted');
+  };
   return (
     <section aria-label="Recent" className="flex flex-col gap-1.5">
       <span className="px-1.5">
@@ -116,8 +124,8 @@ function RecentSessions() {
       </span>
       <ul className="flex flex-col divide-y divide-divider overflow-hidden rounded-[22px] bg-white ring-1 ring-edge">
         {sessions.map((s) => (
-          <li key={s.id}>
-            <Link to={`/s/${s.id}`} className="flex items-center gap-3 px-3.5 py-3 hover:bg-[#fffaf6]">
+          <li key={s.id} className="flex items-center hover:bg-[#fffaf6]">
+            <Link to={`/s/${s.id}`} className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-3.5">
               <SetTile set={{ id: s.setId ?? 'all', name: s.setName }} />
               <span className="min-w-0 flex-1">
                 <b className="block truncate">{s.setName}</b>
@@ -128,9 +136,36 @@ function RecentSessions() {
               </span>
               <Avatars people={s.members} />
             </Link>
+            <IconButton label="Delete session" onClick={() => setDeleting(s)} className="mx-2 !bg-transparent !ring-0 text-muted hover:!bg-soft">
+              <Trash2 size={16} aria-hidden="true" />
+            </IconButton>
           </li>
         ))}
       </ul>
+      {deleting && <DeleteSessionSheet session={deleting} onDeleted={() => deleted(deleting.id)} onClose={() => setDeleting(null)} />}
     </section>
+  );
+}
+
+function DeleteSessionSheet({ session, onDeleted, onClose }: { session: RecentSession; onDeleted: () => void; onClose: () => void }) {
+  const remove = useSubmit(async () => {
+    await api(`/sessions/${session.id}`, { method: 'DELETE' });
+    onDeleted();
+  });
+  return (
+    <Sheet title="Delete session" onClose={onClose}>
+      <Confirm
+        question={
+          <>
+            Delete the <b>{session.setName}</b> session for everyone? Its picks go with it; everyone's rankings stay.
+          </>
+        }
+        action="Delete session"
+        busy={remove.busy}
+        error={remove.error}
+        onConfirm={() => remove.submit()}
+        onCancel={onClose}
+      />
+    </Sheet>
   );
 }
