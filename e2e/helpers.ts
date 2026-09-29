@@ -11,8 +11,18 @@ export async function signUp(page: Page, name: string, pin = '1234', path = '/')
   await signUpHere(page, name, pin);
 }
 
+/** The "set your home" prompt a session shows someone with no home (#33). */
+export const homePrompt = (page: Page) => page.getByRole('dialog', { name: 'Home address' }).filter({ has: page.getByRole('button', { name: 'Not now' }) });
+
+/**
+ * New people have no home, so every session they open prompts for one. Most tests aren't about that:
+ * whenever the prompt is in the way, press "Not now". Tests about the prompt remove this with `page.removeLocatorHandler(homePrompt(page))`.
+ */
+const skipHomePrompt = (page: Page) => page.addLocatorHandler(homePrompt(page), (prompt) => prompt.getByRole('button', { name: 'Not now' }).click());
+
 /** Signs up a new person from the sign-in screen that's already showing. */
 export async function signUpHere(page: Page, name: string, pin = '1234') {
+  await skipHomePrompt(page);
   await page.getByRole('button', { name: /i'm new/i }).click();
   await page.getByLabel('Your name').fill(name);
   await page.getByRole('button', { name: 'Continue' }).click();

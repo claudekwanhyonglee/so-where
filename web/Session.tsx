@@ -3,7 +3,9 @@ import { startTransition, useCallback, useEffect, useRef, useState, ViewTransiti
 import { toast } from 'sonner';
 import { api, ApiError, errorMessage } from './api.ts';
 import { Leaderboard, type Board } from './Leaderboard.tsx';
-import { googleMapsUrl, plural, swatch, transitDirectionsUrl } from './model.ts';
+import type { Me } from './App.tsx';
+import { HomeSheet } from './HomeSheet.tsx';
+import { googleMapsUrl, plural, swatch, transitDirectionsUrl, transitPill, type TransitAnswer } from './model.ts';
 import { Link } from './router.tsx';
 import { Avatar, Button, Card, DESKTOP_QUERY, Eyebrow, Notice, Sheet, inputBox } from './ui.tsx';
 import { usePolling } from './usePolling.ts';
@@ -20,8 +22,10 @@ const BOARD_POLL_MS = 2000;
 /** `api` for calls about this session: a 404 means someone deleted it. */
 type SessionApi = <T>(path: string, init?: Parameters<typeof api>[1]) => Promise<T>;
 
-export function SessionPage({ id, meId }: { id: string; meId: number }) {
+export function SessionPage({ id, me, onHomeSaved }: { id: string; me: Me; onHomeSaved: () => void }) {
   const [deleted, setDeleted] = useState(false);
+  // Asked once per visit: "Not now" (or saving) closes it until they open a session again.
+  const [askingForHome, setAskingForHome] = useState(me.home === null);
   const call = useCallback(
     <T,>(path: string, init?: Parameters<typeof api>[1]) =>
       api<T>(path, init).catch((err: unknown) => {
@@ -30,7 +34,15 @@ export function SessionPage({ id, meId }: { id: string; meId: number }) {
       }),
     [],
   );
-  return deleted ? <SessionDeleted /> : <LiveSession id={id} meId={meId} call={call} />;
+  if (deleted) return <SessionDeleted />;
+  // Cards look their transit time up again when home changes.
+  const homeKey = me.home ? `${me.home.lat},${me.home.lng}` : '';
+  return (
+    <>
+      <LiveSession id={id} meId={me.id} homeKey={homeKey} call={call} />
+      {askingForHome && <HomeSheet me={me} onSaved={onHomeSaved} close={() => setAskingForHome(false)} offerNotNow />}
+    </>
+  );
 }
 
 function SessionDeleted() {
@@ -45,7 +57,7 @@ function SessionDeleted() {
   );
 }
 
-function LiveSession({ id, meId, call }: { id: string; meId: number; call: SessionApi }) {
+function LiveSession({ id, meId, homeKey, call }: { id: string; meId: number; homeKey: string; call: SessionApi }) {
   const info = usePolling(useCallback(() => call<SessionInfo>(`/sessions/${id}`), [id, call]), INFO_POLL_MS);
   // `version` changes whenever this device picks, so the board refreshes straight away too.
   const [version, setVersion] = useState(0);
@@ -85,7 +97,7 @@ function LiveSession({ id, meId, call }: { id: string; meId: number; call: Sessi
       {info.members.length === 1 && <SoloBanner onShare={share} />}
       <div className="grid gap-5 desk:grid-cols-[minmax(0,1fr)_340px] desk:items-start">
         <div className={shownOnPhone('pick')}>
-          <Picker sessionId={id} call={call} onChanged={() => setVersion((v) => v + 1)} />
+          <Picker sessionId={id} homeKey={homeKey} call={call} onChanged={() => setVersion((v) => v + 1)} />
         </div>
         <div className={`desk:sticky desk:top-4 ${shownOnPhone('board')}`}>
           <Leaderboard board={board} />
@@ -184,7 +196,7 @@ const PICK_FEEDBACK_MS = 280;
 const TIE_FEEDBACK_MS = 120;
 const MILESTONES: Record<number, string> = { 10: '10 picks! Your top 3 is taking shape.', 25: '25 picks. You really care about dinner.' };
 
-function Picker({ sessionId, call, onChanged }: { sessionId: string; call: SessionApi; onChanged: () => void }) {
+function Picker({ sessionId, homeKey, call, onChanged }: { sessionId: string; homeKey: string; call: SessionApi; onChanged: () => void }) {
   const [state, setState] = useState<PairResponse | null>(null);
   const [chosen, setChosen] = useState<number | 'tie' | null>(null);
   const [error, setError] = useState('');
@@ -254,11 +266,11 @@ function Picker({ sessionId, call, onChanged }: { sessionId: string; call: Sessi
         <>
           <ViewTransition key={`${pair[0].id}-${pair[1].id}-${state.picks}`} enter="pair-enter" exit="pair-exit">
             <div className="flex flex-col desk:flex-row">
-              <PlaceCard sessionId={sessionId} place={pair[0]} position="first" state={cardState(pair[0].id)} onPick={() => choose(pair[0].id)} onVeto={() => veto(pair[0])} />
+              <PlaceCard sessionId={sessionId} homeKey={homeKey} place={pair[0]} position="first" state={cardState(pair[0].id)} onPick={() => choose(pair[0].id)} onVeto={() => veto(pair[0])} />
               <span aria-hidden="true" className="pointer-events-none relative z-[2] -my-[17px] grid size-11 place-items-center self-center rounded-full bg-ink text-[13px] font-extrabold tracking-[.04em] text-mustard ring-[5px] ring-peach desk:-mx-[17px] desk:my-0">
                 OR
               </span>
-              <PlaceCard sessionId={sessionId} place={pair[1]} position="second" state={cardState(pair[1].id)} onPick={() => choose(pair[1].id)} onVeto={() => veto(pair[1])} />
+              <PlaceCard sessionId={sessionId} homeKey={homeKey} place={pair[1]} position="second" state={cardState(pair[1].id)} onPick={() => choose(pair[1].id)} onVeto={() => veto(pair[1])} />
             </div>
           </ViewTransition>
           <div className="flex items-center justify-center gap-4">
@@ -313,9 +325,7 @@ const KeyHint = ({ keys, children }: { keys: string[]; children: string }) => (
   </span>
 );
 
-type TransitAnswer = { minutes: number } | { minutes: null; reason: string };
-
-function useTransitTime(sessionId: string, placeId: number) {
+function useTransitTime(sessionId: string, placeId: number, homeKey: string) {
   const [answer, setAnswer] = useState<TransitAnswer | null>(null);
   useEffect(() => {
     let alive = true;
@@ -327,7 +337,7 @@ function useTransitTime(sessionId: string, placeId: number) {
     return () => {
       alive = false;
     };
-  }, [sessionId, placeId]);
+  }, [sessionId, placeId, homeKey]);
   return answer;
 }
 
@@ -339,6 +349,7 @@ const cardMotion = {
 
 function PlaceCard({
   sessionId,
+  homeKey,
   place,
   position,
   state,
@@ -346,13 +357,15 @@ function PlaceCard({
   onVeto,
 }: {
   sessionId: string;
+  homeKey: string;
   place: CardPlace;
   position: 'first' | 'second';
   state: keyof typeof cardMotion;
   onPick: () => void;
   onVeto: () => void;
 }) {
-  const transit = useTransitTime(sessionId, place.id);
+  const transit = useTransitTime(sessionId, place.id, homeKey);
+  const shown = transitPill(transit);
   const { bg, fg } = swatch(place.id);
   const pill = fg === '#2a1712' ? 'bg-ink/10 hover:bg-ink/20' : 'bg-white/20 hover:bg-white/30';
   // On phones the OR badge sits on the seam, so the cards make room for it.
@@ -372,12 +385,12 @@ function PlaceCard({
         <span className="opacity-80">{place.suburb ?? 'Suburb unknown'}</span>
         {place.note && <span className="text-sm italic opacity-90">“{place.note}”</span>}
         <div className="mt-auto flex flex-wrap gap-1.5 pt-2 [&>*]:inline-flex [&>*]:items-center [&>*]:gap-[5px] [&>*]:rounded-full [&>*]:px-[11px] [&>*]:py-[5px] [&>*]:text-[13px] [&>*]:font-bold [&>a]:pointer-events-auto">
-          {transit?.minutes != null && (
+          {shown === 'time' && (
             <span className={pill} title="By public transport from home, leaving now">
-              <TramFront size={16} aria-hidden="true" /> {transit.minutes} min
+              <TramFront size={16} aria-hidden="true" /> {transit?.minutes} min
             </span>
           )}
-          {transit && transit.minutes === null && (
+          {shown === 'directions' && (
             <a href={transitDirectionsUrl(place)} target="_blank" rel="noreferrer" className={pill}>
               <TramFront size={16} aria-hidden="true" /> Directions
             </a>

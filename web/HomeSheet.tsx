@@ -10,7 +10,7 @@ type Suggestion = { label: string; lat: number; lng: number };
 const SUGGEST_DELAY_MS = 300;
 
 /** Setting your home: address suggestions as you type, and a map of the one you choose. */
-export function HomeSheet({ me, onSaved, close }: { me: Me; onSaved: () => void; close: () => void }) {
+export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me; onSaved: () => void; close: () => void; offerNotNow?: boolean }) {
   const [address, setAddress] = useState(me.home?.address ?? '');
   const [query, setQuery] = useState(''); // what was typed; choosing a suggestion clears it
   const [chosen, setChosen] = useState<Suggestion | null>(null);
@@ -63,6 +63,11 @@ export function HomeSheet({ me, onSaved, close }: { me: Me; onSaved: () => void;
         <Button type="submit" disabled={busy}>
           Save address
         </Button>
+        {offerNotNow && (
+          <Button type="button" variant="ghost" onClick={close}>
+            Not now
+          </Button>
+        )}
       </form>
     </Sheet>
   );

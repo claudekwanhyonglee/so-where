@@ -34,7 +34,12 @@ export function relativeDay(then: number, now = Date.now()) {
 
 export const googleMapsUrl = (place: Pick<Place, 'key'>) => `https://maps.google.com/?cid=${place.key}`;
 
-export const transitDirectionsUrl = (place: Pick<Place, 'lat' | 'lng' | 'name'>) => {
+export type TransitAnswer = { minutes: number } | { minutes: null; reason: 'no-home' | 'no-location' | 'no-trip' | 'unavailable' };
+
+/** What a card shows for getting there: the time, a Directions link when there's no time, or nothing (still loading, or no home set). */
+export const transitPill = (answer: TransitAnswer | null) => (!answer ? null : answer.minutes !== null ? 'time' : answer.reason === 'no-home' ? null : 'directions');
+
+export const transitDirectionsUrl =(place: Pick<Place, 'lat' | 'lng' | 'name'>) => {
   const destination = place.lat !== null && place.lng !== null ? `${place.lat},${place.lng}` : encodeURIComponent(place.name);
   return `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=transit`;
 };
