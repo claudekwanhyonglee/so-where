@@ -212,7 +212,7 @@ const STEP_CONTENT: Record<StepId, (step: GuideStep, state: GuideState, actions:
   places: (step, state, a) => {
     if (step.status === 'done') return { text: `${plural(state.placeCount, 'place')} added. Add more any time on the Places page.` };
     return {
-      text: 'Paste a Google Maps link, or import your saved lists.',
+      text: 'Search by name or paste a Google Maps link, or import your saved lists.',
       extra: state.placeCount === 1 && <OneOfTwo />,
       buttons: (
         <>
@@ -235,7 +235,7 @@ const STEP_CONTENT: Record<StepId, (step: GuideStep, state: GuideState, actions:
         text: `${names} ${live.members.length === 1 ? 'is' : 'are'} picking from ${live.setName} right now. Jump in, or start your own.`,
         extra: (
           <span className="flex items-center gap-2 text-xs font-bold">
-            <Avatars people={live.members} /> Picking now
+            <Avatars people={live.members} /> Picking now · <PlacesSoFar count={state.placeCount} />
           </span>
         ),
         buttons: (
@@ -246,23 +246,35 @@ const STEP_CONTENT: Record<StepId, (step: GuideStep, state: GuideState, actions:
             <Button variant="glass" onClick={a.startPicking}>
               Start your own
             </Button>
+            <TextButton onClick={a.addPlace}>Or add more places</TextButton>
           </>
         ),
       };
     }
     return {
       text: "Tap whichever of two places you'd rather go to. Then share the link so friends can pick too.",
-      buttons:
-        state.placeCount >= 2 ? (
-          <Button variant="cream" onClick={a.startPicking}>
-            Start picking <ChevronRight size={18} aria-hidden="true" />
-          </Button>
-        ) : (
-          <span className="rounded-full bg-peach/20 px-[18px] py-[11px] font-bold text-peach/85">Add 2 places first</span>
-        ),
+      extra: (
+        <span className="text-xs font-bold">
+          <PlacesSoFar count={state.placeCount} />
+        </span>
+      ),
+      buttons: (
+        <>
+          {state.placeCount >= 2 ? (
+            <Button variant="cream" onClick={a.startPicking}>
+              Start picking <ChevronRight size={18} aria-hidden="true" />
+            </Button>
+          ) : (
+            <span className="rounded-full bg-peach/20 px-[18px] py-[11px] font-bold text-peach/85">Add 2 places first</span>
+          )}
+          <TextButton onClick={a.addPlace}>Or add more places</TextButton>
+        </>
+      ),
     };
   },
 };
+
+const PlacesSoFar = ({ count }: { count: number }) => <>{plural(count, 'place')} so far</>;
 
 const pickingWith = (people: { name: string }[]) => `You're picking with ${namesList(people)}.`;
 

@@ -227,6 +227,11 @@ test('#38 AC4: a step done elsewhere shows as done without reloading', async ({ 
   await expect(step(page, 'Start picking').getByRole('button', { name: 'Start picking' })).toBeEnabled();
 });
 
+test('#51 AC3: the places step mentions searching by name, not only pasting a link', async ({ page, browser }) => {
+  await newcomer(page, browser);
+  await expect(step(page, 'Add 2 places')).toContainText('Search by name or paste a Google Maps link, or import your saved lists.');
+});
+
 test('#38 AC4: picking waits for 2 places, but places can be added before deciding on home', async ({ page, browser }) => {
   await page.setViewportSize(DESKTOP);
   await newcomer(page, browser, { home: 'undecided' });
