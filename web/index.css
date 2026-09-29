@@ -23,6 +23,20 @@
   --color-edge: #f0dccf;
   --color-divider: #f3e4da;
   --color-soft: #f6e6dc;
+  --color-skip: #b07800;
+  --color-track: #e2cfc4;
+
+  --animate-bob: bob 1.6s ease-in-out infinite;
+  @keyframes bob {
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+}
+
+/* The guide's route between two stops: dashes (track colour, or mustard after a skipped stop) or a solid fill. */
+.route-dashes {
+  background: repeating-linear-gradient(var(--dash-direction, 90deg), var(--dash-color, var(--color-track)) 0 6px, transparent 6px 10px);
 }
 
 /* View transitions: leaderboard rows glide to their new places; a new pair of cards slides in as the old one fades. */

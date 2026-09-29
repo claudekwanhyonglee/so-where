@@ -10,7 +10,7 @@ import { Link, usePath } from './router.tsx';
 import { SignIn, type SignedIn } from './SignIn.tsx';
 import { Avatar } from './ui.tsx';
 
-export type Me = { id: number; name: string; home: { address: string; lat: number; lng: number } | null; homeSkipped: boolean };
+export type Me = { id: number; name: string; home: { address: string; lat: number; lng: number } | null; homeSkipped: boolean; guideClosed: boolean };
 
 function useMe() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
@@ -64,7 +64,7 @@ function Page({ path, me, refresh, homeJustSkipped }: { path: string; me: Me; re
   if (places) return <Places setId={places[1]} />;
   const sessionId = path.match(/^\/s\/([\w-]+)$/)?.[1];
   if (sessionId) return <SessionPage key={sessionId} id={sessionId} me={me} onHomeSaved={refresh} askForHome={me.home === null && !homeJustSkipped} />;
-  return <Home me={me} />;
+  return <Home me={me} onMeChanged={refresh} />;
 }
 
 type NavItem = { to: string; label: string; icon: LucideIcon };

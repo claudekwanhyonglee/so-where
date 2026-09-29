@@ -18,7 +18,7 @@ export const homePrompt = (page: Page) => page.getByRole('dialog', { name: 'Home
  * New people have no home, so every session they open prompts for one. Most tests aren't about that:
  * whenever the prompt is in the way, press "Not now". Tests about the prompt remove this with `page.removeLocatorHandler(homePrompt(page))`.
  */
-const skipHomePrompt = (page: Page) => page.addLocatorHandler(homePrompt(page), (prompt) => prompt.getByRole('button', { name: 'Not now' }).click());
+export const skipHomePrompt = (page: Page) => page.addLocatorHandler(homePrompt(page), (prompt) => prompt.getByRole('button', { name: 'Not now' }).click());
 
 /** The sign-up step asking for a home, right after the PIN (#37). */
 export const homeStep = (page: Page) => page.getByRole('main').filter({ has: page.getByRole('heading', { name: 'How far is dinner?' }) });
@@ -33,12 +33,27 @@ export async function signUpToHomeStep(page: Page, name: string, pin = '1234') {
   await expect(homeStep(page)).toBeVisible();
 }
 
-/** Signs up a new person from the sign-in screen that's already showing, skipping the home step (most tests aren't about it). */
+/**
+ * Signs up a new person from the sign-in screen that's already showing. Most tests aren't about getting started,
+ * so it skips the home step and closes the getting-started guide (#38), leaving Home as it is for everyone else.
+ */
 export async function signUpHere(page: Page, name: string, pin = '1234') {
   await skipHomePrompt(page);
   await signUpToHomeStep(page, name, pin);
+  await page.request.post('/api/guide/close'); // the new person is signed in by now
   await homeStep(page).getByRole('button', { name: 'Skip for now' }).click();
   await expectSignedIn(page);
+}
+
+/**
+ * Empties the group's places (and, with `sessions`, its sessions) from another device, so the next person to sign up
+ * finds a brand-new group. The e2e server is shared by every test, so earlier tests leave both behind.
+ */
+export async function emptyGroup(browser: Browser, { sessions = false } = {}) {
+  const { page, context } = await newPerson(browser, 'Tidier');
+  for (const { id } of await (await page.request.get('/api/places')).json()) await page.request.delete(`/api/places/${id}`);
+  if (sessions) for (const { id } of await (await page.request.get('/api/sessions')).json()) await page.request.delete(`/api/sessions/${id}`);
+  await context.close();
 }
 
 /** Signs in an existing person from the sign-in screen that's already showing. */

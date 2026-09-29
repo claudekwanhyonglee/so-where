@@ -37,6 +37,7 @@ const buttonStyles = {
   secondary: 'ring-[1.5px] ring-inset ring-[#e2cfc4] hover:bg-soft',
   cream: 'bg-peach text-ink',
   ghost: 'text-muted hover:text-ink',
+  glass: 'bg-white/20 text-peach hover:bg-white/30',
   danger: 'text-stamp hover:bg-blush',
 };
 
@@ -280,3 +281,12 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
     </dialog>
   );
 }
+
+/** A rubber stamp: "Absolutely not", "Skipped". Its colour comes from the text colour in `className`. */
+export const Stamp = ({ large = false, className = '', children }: { large?: boolean; className?: string; children: ReactNode }) => (
+  <span
+    className={`inline-block -rotate-4 rounded-[5px] border-2 border-current font-extrabold tracking-[.12em] whitespace-nowrap uppercase ${large ? 'px-[7px] text-[11px]/[1.5]' : 'px-[5px] text-[9px]/[1.5]'} ${className}`}
+  >
+    {children}
+  </span>
+);

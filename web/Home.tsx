@@ -5,6 +5,7 @@ import { api } from './api.ts';
 import type { Me } from './App.tsx';
 import { MIN_PLACES_TO_PICK, plural, relativeDay } from './model.ts';
 import { Link, navigate } from './router.tsx';
+import { Guide } from './Guide.tsx';
 import { Confirm } from './PlaceSheets.tsx';
 import { useSets, type SetSummary } from './Places.tsx';
 import { Avatars, Button, Eyebrow, IconButton, Notice, SetTile, Sheet, useSubmit } from './ui.tsx';
@@ -12,7 +13,15 @@ import { Avatars, Button, Eyebrow, IconButton, Notice, SetTile, Sheet, useSubmit
 type RecentSession = { id: string; setId: number | null; setName: string; createdAt: number; members: { id: number; name: string }[]; topPick: string | null };
 
 
-export function Home({ me }: { me: Me }) {
+export function Home({ me, onMeChanged }: { me: Me; onMeChanged: () => void }) {
+  if (!me.guideClosed) {
+    return (
+      <>
+        <Guide me={me} onMeChanged={onMeChanged} />
+        <RecentSessions />
+      </>
+    );
+  }
   return (
     <>
       <h1 className="font-display text-[30px]/[1.1] desk:text-[38px]">Where to, {me.name}?</h1>
