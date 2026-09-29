@@ -15,7 +15,7 @@ export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me;
   return (
     <Sheet title="Home address" onClose={close}>
       <HomeAddressForm
-        initial={me.home?.address}
+        initial={me.home ?? undefined}
         hint="Used to show how long public transport takes from your place, leaving now. Only you see your travel times."
         submitLabel="Save address"
         onSaved={() => {
@@ -38,15 +38,15 @@ export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me;
  * The address field with suggestions as you type and a map of the one you choose, then the save button
  * (and `children` under it). Used by the Home address sheet and the sign-up home step.
  */
-export function HomeAddressForm({ initial = '', hint, submitLabel, onSaved, children }: { initial?: string; hint?: string; submitLabel: string; onSaved: () => void; children?: ReactNode }) {
-  const [address, setAddress] = useState(initial);
+export function HomeAddressForm({ initial, hint, submitLabel, onSaved, children }: { initial?: { address: string; lat: number; lng: number }; hint?: string; submitLabel: string; onSaved: () => void; children?: ReactNode }) {
+  const [address, setAddress] = useState(initial?.address ?? '');
   const [query, setQuery] = useState(''); // what was typed; choosing a suggestion clears it
-  const [chosen, setChosen] = useState<Suggestion | null>(null);
+  const [chosen, setChosen] = useState<Suggestion | null>(initial ? { label: initial.address, lat: initial.lat, lng: initial.lng } : null);
   const lookup = useAddressSuggestions(query);
 
   const { submit, error, busy } = useSubmit(async () => {
-    const fromSuggestion = chosen?.label === address ? { lat: chosen.lat, lng: chosen.lng } : {};
-    await api('/me/home', { method: 'PUT', body: { address, ...fromSuggestion } });
+    if (!chosen) return;
+    await api('/me/home', { method: 'PUT', body: { address: chosen.label, lat: chosen.lat, lng: chosen.lng } });
     onSaved();
   });
   const type = (text: string) => {
@@ -66,10 +66,10 @@ export function HomeAddressForm({ initial = '', hint, submitLabel, onSaved, chil
       <p data-testid="address-status" role="status" aria-live="polite" className="sr-only">
         {lookupAnnouncement(lookup)}
       </p>
-      {lookup.status === 'unavailable' && <Notice tone="info">Address suggestions are unavailable right now. You can still type your full address and save it.</Notice>}
+      {lookup.status === 'unavailable' && <Notice tone="info">Address suggestions are unavailable right now. Try again in a moment.</Notice>}
       {(lookup.status === 'searching' || lookup.status === 'found') && <SuggestionList lookup={lookup} onChoose={choose} />}
       {chosen && <MapPreview point={chosen} />}
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" disabled={busy || !chosen}>
         {submitLabel}
       </Button>
       {children}

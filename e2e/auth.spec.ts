@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { INVITE, PIN_WARNING, signedInAs, signInHere, signUp, uniqueName } from './helpers.ts';
+import { INVITE, PIN_WARNING, saveHomeFromSuggestion, signedInAs, signInHere, signUp, uniqueName } from './helpers.ts';
 
 test('#3 AC1: without the invite code the app shows no access', async ({ page }) => {
   await page.goto('/');
@@ -33,13 +33,7 @@ test('#3 AC6 + AC7 + AC8 + AC9: profile — home address, PIN change with warnin
   await page.getByRole('link', { name: /you/i }).click();
 
   await page.getByRole('button', { name: /^Home address/ }).click();
-  const home = page.getByRole('dialog', { name: 'Home address' });
-  await home.getByLabel('Address').fill('Nowhere Lane');
-  await home.getByRole('button', { name: /save address/i }).click();
-  await expect(home.getByText(/couldn.t find that address/i)).toBeVisible();
-
-  await home.getByLabel('Address').fill('1 Pretend St, Carlton');
-  await home.getByRole('button', { name: /save address/i }).click();
+  await saveHomeFromSuggestion(page);
   await expect(page.getByText(/home saved/i)).toBeVisible();
 
   await page.getByRole('button', { name: 'Change PIN' }).click();

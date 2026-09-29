@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { addPlaceViaApi, newPerson, newSetViaApi, startPicking, uniqueName } from './helpers.ts';
+import { addPlaceViaApi, newPerson, newSetViaApi, saveHomeFromSuggestion, startPicking, uniqueName } from './helpers.ts';
 
 // The e2e server fakes Transitous: every trip takes 25 minutes.
 // Without a home, cards used to show a Directions link; since #33 AC5 they show no transit pill at all
@@ -27,8 +27,7 @@ test('#10 AC1 + #33 AC5: cards show transit time from home, and no transit pill 
   // With a home: the time, from Transitous.
   await page.getByRole('link', { name: 'You', exact: true }).click();
   await page.getByRole('button', { name: /^Home address/ }).click();
-  await page.getByRole('dialog').getByLabel('Address').fill('1 Pretend St, Carlton');
-  await page.getByRole('dialog').getByRole('button', { name: /save address/i }).click();
+  await saveHomeFromSuggestion(page);
   await expect(page.getByText(/home saved/i)).toBeVisible();
   await page.goto(sessionUrl);
   for (const card of await page.getByRole('article').all()) await expect(card).toContainText('25 min');

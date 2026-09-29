@@ -84,11 +84,19 @@ describe('#32 AC3: PUT /api/me/home with a chosen suggestion', () => {
     const { alex } = await setup(fakePhoton([]));
     expect((await alex.put('/api/me/home', { address: 'Edge', lat: -90, lng: 180 })).status).toBe(200);
   });
+});
 
-  it('the address-only form still looks the address up', async () => {
-    const { alex } = await setup(fakePhoton([]));
-    expect((await alex.put('/api/me/home', { address: '1 Pretend St, Carlton' })).status).toBe(200);
-    expect((await (await alex.get('/api/me')).json()).home).toEqual({ address: '1 Pretend St, Carlton', lat: -37.8, lng: 144.97 });
+describe('#42 AC4: PUT /api/me/home needs valid lat/lng; free text is never looked up', () => {
+  it.each([
+    ['address only', { address: '1 Pretend St, Carlton' }],
+    ['address with invalid coordinates', { address: '1 Pretend St, Carlton', lat: 'x', lng: 144.97 }],
+  ])('%s is a 400, nothing is saved, and Nominatim is not asked', async (_, body) => {
+    const calls: URL[] = [];
+    const ctx = testApp({ fetch: fakeFetch((url) => void calls.push(url), fakeNominatim({ '1 Pretend St, Carlton': { lat: -37.8, lng: 144.97 } })) });
+    const alex = await signedInDevice(ctx.app, 'Alex');
+    expect((await alex.put('/api/me/home', body)).status).toBe(400);
+    expect((await (await alex.get('/api/me')).json()).home).toBeNull();
+    expect(calls.filter((u) => u.hostname === 'nominatim.openstreetmap.org')).toHaveLength(0);
   });
 });
 
@@ -102,7 +110,7 @@ describe("#32 AC4: Photon can't be reached", () => {
 
   it('a network failure is a 502, and the saved home is unchanged', async () => {
     const { alex } = await setup(() => undefined); // nothing answers: fakeFetch throws, like a network error
-    await alex.put('/api/me/home', { address: '1 Pretend St, Carlton' });
+    await alex.put('/api/me/home', { address: '1 Pretend St, Carlton', lat: -37.8, lng: 144.97 });
     expect((await alex.get('/api/geocode?q=pretend')).status).toBe(502);
     expect((await (await alex.get('/api/me')).json()).home).toEqual({ address: '1 Pretend St, Carlton', lat: -37.8, lng: 144.97 });
   });

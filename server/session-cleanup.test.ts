@@ -3,20 +3,20 @@ import { readFileSync } from 'node:fs';
 import { configFromEnv } from './config.ts';
 import { fakeFetch, fakeNominatim, fakeTransitous, signedInDevice, testApp } from './test-helpers.ts';
 
-const HOME = '1 Pretend St, Carlton';
+const HOME = { address: '1 Pretend St, Carlton', lat: -37.79, lng: 144.97 };
 const placeLink = (hex: string, name: string) =>
   `https://www.google.com/maps/place/${name.replaceAll(' ', '+')}/@-37.8,144.96,17z/data=!4m6!3m5!1s0x1:0x${hex}!8m2!3d-37.8!4d144.96`;
 
 async function setup(maxSessions?: number) {
   let clock = Date.UTC(2026, 8, 29, 8, 0);
   const ctx = testApp({
-    fetch: fakeFetch(fakeNominatim({ [HOME]: { lat: -37.79, lng: 144.97 } }), fakeTransitous([600])),
+    fetch: fakeFetch(fakeNominatim(), fakeTransitous([600])),
     now: () => (clock += 1000),
     config: maxSessions ? { maxSessions } : {},
   });
   const alex = await signedInDevice(ctx.app, 'Alex');
   const jo = await signedInDevice(ctx.app, 'Jo');
-  await alex.put('/api/me/home', { address: HOME });
+  await alex.put('/api/me/home', HOME);
   const places: number[] = [];
   for (const [i, name] of ['Invented A', 'Invented B', 'Invented C'].entries()) {
     places.push((await (await alex.post('/api/places', { url: placeLink(`b${i}`, name) })).json()).place.id);

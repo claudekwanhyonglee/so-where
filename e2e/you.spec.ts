@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { INVITE, PIN_WARNING, expectSignedIn, signInHere, signUp, uniqueName } from './helpers.ts';
+import { INVITE, PIN_WARNING, PRETEND_ST_SUGGESTION, expectSignedIn, saveHomeFromSuggestion, signInHere, signUp, uniqueName } from './helpers.ts';
 
 test('#20 AC1: the You page shows who you are, home, Change PIN and Sign out', async ({ page }) => {
   const name = uniqueName('Me');
@@ -16,12 +16,9 @@ test('#20 AC2: the Home address sheet saves, updates the row and says so', async
   await signUp(page, uniqueName('Homer'));
   await page.goto('/you');
   await page.getByRole('button', { name: /^Home address/ }).click();
-  const sheet = page.getByRole('dialog', { name: 'Home address' });
-  await sheet.getByLabel('Address').fill('1 Pretend St, Carlton');
-  await sheet.getByRole('button', { name: 'Save address' }).click();
-  await expect(sheet).toBeHidden();
+  await saveHomeFromSuggestion(page);
   await expect(page.getByText('Home saved')).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Home address/ })).toContainText('1 Pretend St, Carlton');
+  await expect(page.getByRole('button', { name: /^Home address/ })).toContainText(PRETEND_ST_SUGGESTION);
 });
 
 test('#20 AC3: Change PIN uses the 4-cell input; the 4th digit changes it', async ({ page, browser }) => {
