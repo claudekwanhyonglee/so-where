@@ -313,5 +313,5 @@ const Flame = ({ className }: { className: string }) => (
 
 /** The "Absolutely not" mark: a rubber stamp. */
 export function NopeStamp({ who }: { who: string }) {
-  return <Stamp className="mt-[3px] text-stamp">Absolutely not · {who}</Stamp>;
+  return <Stamp className="mt-[3px] self-start text-stamp">Absolutely not · {who}</Stamp>;
 }
