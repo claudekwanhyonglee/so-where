@@ -5,6 +5,7 @@ import { api, errorMessage } from './api.ts';
 import { googleMapsUrl, plural, type Place } from './model.ts';
 import type { NamedSet, OpenSheet, PlaceWithSets } from './Places.tsx';
 import { navigate } from './router.tsx';
+import { lookupAnnouncement, MapPreview, Spinner, SuggestionList, useLookup } from './search.tsx';
 import { Button, CheckOption, Field, inputBox, Notice, PlaceTile, SetTile, Sheet, useSubmit } from './ui.tsx';
 
 type SheetProps = { close: () => void; reload: () => Promise<unknown> };
@@ -14,14 +15,14 @@ const HOW_TO_COPY = 'In Google Maps, open the place, tap Share and copy the link
 const createSet = (name: string) => api<{ id: number }>('/sets', { body: { name } });
 const setMembership = (setId: number, placeId: number, member: boolean) => api(`/sets/${setId}/places/${placeId}`, { method: member ? 'PUT' : 'DELETE' });
 
-/** Add a place from its link, choosing its sets in the same sheet. */
+/** Add a place found by name or from its link, choosing its sets in the same sheet. */
 export function AddPlaceSheet({ named, into, open, close, reload }: SheetProps & { named: NamedSet[]; into?: NamedSet; open?: (s: OpenSheet) => void }) {
-  const [url, setUrl] = useState('');
   const [note, setNote] = useState('');
   const [checked, setChecked] = useState<ReadonlySet<number>>(new Set(into ? [into.id] : []));
+  const { box, chosen } = usePlaceBox();
   const { submit, error, busy } = useSubmit(async () => {
-    if (!url.trim()) throw new Error(`Paste a Google Maps link. ${HOW_TO_COPY}`);
-    const res = await api<{ place: Place; message?: string }>('/places', { body: { url, note, setIds: [...checked] } });
+    if (!chosen) return;
+    const res = await api<{ place: Place; message?: string }>('/places', { body: { ...chosen.add, note, setIds: [...checked] } });
     await reload();
     close();
     toast(res.message ?? `Added ${res.place.name}`);
@@ -31,17 +32,8 @@ export function AddPlaceSheet({ named, into, open, close, reload }: SheetProps &
   return (
     <Sheet title={into ? `Add to ${into.name}` : 'Add a place'} onClose={close}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
-        <Field
-          label="Google Maps link"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          inputMode="url"
-          autoComplete="off"
-          placeholder="https://maps.app.goo.gl/…"
-          autoFocus
-          error={error}
-          hint={HOW_TO_COPY}
-        />
+        {box}
+        {error && <Notice tone="error">{error}</Notice>}
         <Field label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Get the dumplings" />
         <SetChecklist
           named={named}
@@ -53,7 +45,7 @@ export function AddPlaceSheet({ named, into, open, close, reload }: SheetProps &
             setChecked((was) => new Set([...was, id]));
           }}
         />
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || !chosen}>
           {busy ? 'Adding…' : 'Add place'}
         </Button>
       </form>
@@ -64,6 +56,79 @@ export function AddPlaceSheet({ named, into, open, close, reload }: SheetProps &
       )}
     </Sheet>
   );
+}
+
+type PlaceResult = { key: string; name: string; address: string; lat: number; lng: number };
+type LinkedPlace = { name: string; lat: number; lng: number };
+type ChosenPlace = LinkedPlace & { add: { key: string; name: string; lat: number; lng: number } | { url: string } };
+
+const isLink = (text: string) => /^\s*https?:\/\//i.test(text);
+
+/**
+ * One box for finding a place: typing a name suggests places to choose from, and pasting a Google Maps link finds the
+ * place it points to. Either way the place is shown on a map, and `chosen` is what to add (null until there is one).
+ */
+function usePlaceBox(): { box: ReactNode; chosen: ChosenPlace | null } {
+  const [text, setText] = useState('');
+  const [picked, setPicked] = useState<PlaceResult | null>(null);
+  const link = isLink(text) ? text.trim() : null;
+  const search = useLookup<PlaceResult[]>(!link && !picked && text.trim() ? `/places/search?q=${encodeURIComponent(text)}` : null);
+  const linked = useLookup<LinkedPlace>(link && `/places/link?url=${encodeURIComponent(link)}`);
+  const chosen: ChosenPlace | null = picked
+    ? { ...picked, add: { key: picked.key, name: picked.name, lat: picked.lat, lng: picked.lng } }
+    : link && linked.status === 'found'
+      ? { ...linked.value, add: { url: link } }
+      : null;
+
+  const type = (value: string) => {
+    setText(value);
+    setPicked(null);
+  };
+  const choose = (place: PlaceResult) => {
+    setText(place.name);
+    setPicked(place);
+  };
+
+  const box = (
+    <>
+      <Field
+        label="Name or Google Maps link"
+        value={text}
+        onChange={(e) => type(e.target.value)}
+        autoComplete="off"
+        placeholder="Pretend Trattoria, or https://maps.app.goo.gl/…"
+        autoFocus
+        error={link && linked.status === 'failed' ? linked.error : undefined}
+        hint={`Search by name, or paste a link. ${HOW_TO_COPY}`}
+      />
+      <p role="status" aria-live="polite" className="sr-only">
+        {link ? (linked.status === 'searching' ? 'Finding that place…' : '') : lookupAnnouncement(search, 'places')}
+      </p>
+      {search.status === 'failed' && <Notice tone="info">Place search is unavailable right now. Paste a Google Maps link instead: {HOW_TO_COPY.toLowerCase()}</Notice>}
+      {(search.status === 'searching' || search.status === 'found') && (
+        <SuggestionList
+          lookup={search}
+          noun="places"
+          keyOf={(p) => p.key}
+          render={(p) => <OptionText title={p.name} detail={p.address} />}
+          onChoose={choose}
+        />
+      )}
+      {link && linked.status === 'searching' && (
+        <p className="flex items-center gap-2.5 font-semibold text-muted">
+          <Spinner />
+          Finding that place…
+        </p>
+      )}
+      {chosen && (
+        <>
+          {link && <p className="font-bold">{chosen.name}</p>}
+          <MapPreview point={{ label: chosen.name, lat: chosen.lat, lng: chosen.lng }} />
+        </>
+      )}
+    </>
+  );
+  return { box, chosen };
 }
 
 /** "All places" (always ticked), each named set, and a field to make a new one. */

@@ -3,7 +3,6 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { Hono } from 'hono';
 import type { Deps } from './app.ts';
-import type { Nominatim } from './nominatim.ts';
 import { hashPin, isValidPin, verifyPin } from './pin.ts';
 
 export type Person = { id: number; name: string; home_address: string | null; home_lat: number | null; home_lng: number | null; home_skipped: number; guide_closed: number };
@@ -72,9 +71,9 @@ export const requirePerson =
   };
 
 /** A latitude (limit 90) or longitude (limit 180) from a request body: a real, finite number within ±limit. */
-const isCoordinate = (value: unknown, limit: number): value is number => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= limit;
+export const isCoordinate = (value: unknown, limit: number): value is number => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= limit;
 
-export function authRoutes({ db, config, now }: Deps, nominatim: Nominatim) {
+export function authRoutes({ db, config, now }: Deps) {
   const api = new Hono<AppEnv>();
 
   function signInDevice(c: Context, personId: number) {
@@ -148,30 +147,14 @@ export function authRoutes({ db, config, now }: Deps, nominatim: Nominatim) {
     return c.json({ ok: true });
   });
 
-  /** Either {address, lat, lng} from a chosen suggestion, stored as given, or just {address}, which is looked up. */
+  /** {address, lat, lng} from a chosen suggestion, stored as given. Free text is never looked up. */
   me.put('/home', async (c) => {
-    const body = await c.req.json();
-    const address = String(body.address ?? '').trim();
+    const { address: raw, lat, lng } = await c.req.json();
+    const address = String(raw ?? '').trim();
     if (!address) return c.json({ error: 'Enter an address.' }, 400);
-    const saveHome = (lat: number, lng: number) =>
-      db.prepare('UPDATE people SET home_address = ?, home_lat = ?, home_lng = ? WHERE id = ?').run(address, lat, lng, c.var.person.id);
-
-    if ('lat' in body || 'lng' in body) {
-      const { lat, lng } = body;
-      if (!isCoordinate(lat, 90) || !isCoordinate(lng, 180)) return c.json({ error: 'That location is out of range.' }, 400);
-      saveHome(lat, lng);
-      return c.json({ address, lat, lng });
-    }
-
-    let found;
-    try {
-      found = await nominatim.search(address);
-    } catch {
-      return c.json({ error: "Couldn't reach the address lookup. Try again in a moment." }, 502);
-    }
-    if (!found) return c.json({ error: "Couldn't find that address. Try adding the suburb." }, 422);
-    saveHome(found.lat, found.lng);
-    return c.json({ address, ...found });
+    if (!isCoordinate(lat, 90) || !isCoordinate(lng, 180)) return c.json({ error: 'Choose your address from the suggestions.' }, 400);
+    db.prepare('UPDATE people SET home_address = ?, home_lat = ?, home_lng = ? WHERE id = ?').run(address, lat, lng, c.var.person.id);
+    return c.json({ address, lat, lng });
   });
 
   api.route('/me', me);

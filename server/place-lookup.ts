@@ -7,12 +7,19 @@ const SEARCH_RADIUS_DEG = 0.5; // roughly 50 km around the group's places
 
 type Pending = { id: number; lat: number | null; lng: number | null; lookup_query: string | null };
 
-/** The area the group's already-located places are in: name searches only accept results near it. */
-function groupArea(db: Db): BoundingBox | undefined {
+/** The middle of the group's already-located places, if any are. */
+export function groupCentre(db: Db): LatLng | undefined {
   const { lat, lng } = db
     .prepare('SELECT avg(lat) AS lat, avg(lng) AS lng FROM places WHERE lat IS NOT NULL AND lookup_pending = 0')
     .get() as { lat: number | null; lng: number | null };
-  if (lat === null || lng === null) return undefined;
+  return lat === null || lng === null ? undefined : { lat, lng };
+}
+
+/** The area the group's already-located places are in: name searches only accept results near it. */
+function groupArea(db: Db): BoundingBox | undefined {
+  const centre = groupCentre(db);
+  if (!centre) return undefined;
+  const { lat, lng } = centre;
   return { west: lng - SEARCH_RADIUS_DEG, east: lng + SEARCH_RADIUS_DEG, north: lat + SEARCH_RADIUS_DEG, south: lat - SEARCH_RADIUS_DEG };
 }
 

@@ -1,21 +1,16 @@
-import { MapPin } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { api } from './api.ts';
 import type { Me } from './App.tsx';
-import { plural } from './model.ts';
+import { lookupAnnouncement, MapPreview, SuggestionList, useLookup, type Point } from './search.tsx';
 import { Button, Field, Notice, Sheet, useSubmit } from './ui.tsx';
-
-type Suggestion = { label: string; lat: number; lng: number };
-
-const SUGGEST_DELAY_MS = 300;
 
 /** Setting your home in a sheet: from the You page, and when a session asks. */
 export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me; onSaved: () => void; close: () => void; offerNotNow?: boolean }) {
   return (
     <Sheet title="Home address" onClose={close}>
       <HomeAddressForm
-        initial={me.home?.address}
+        initial={me.home ?? undefined}
         hint="Used to show how long public transport takes from your place, leaving now. Only you see your travel times."
         submitLabel="Save address"
         onSaved={() => {
@@ -36,17 +31,17 @@ export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me;
 
 /**
  * The address field with suggestions as you type and a map of the one you choose, then the save button
- * (and `children` under it). Used by the Home address sheet and the sign-up home step.
+ * (and `children` under it); saving needs a chosen suggestion. Used by the Home address sheet and the sign-up home step.
  */
-export function HomeAddressForm({ initial = '', hint, submitLabel, onSaved, children }: { initial?: string; hint?: string; submitLabel: string; onSaved: () => void; children?: ReactNode }) {
-  const [address, setAddress] = useState(initial);
+export function HomeAddressForm({ initial, hint, submitLabel, onSaved, children }: { initial?: { address: string; lat: number; lng: number }; hint?: string; submitLabel: string; onSaved: () => void; children?: ReactNode }) {
+  const [address, setAddress] = useState(initial?.address ?? '');
   const [query, setQuery] = useState(''); // what was typed; choosing a suggestion clears it
-  const [chosen, setChosen] = useState<Suggestion | null>(null);
-  const lookup = useAddressSuggestions(query);
+  const [chosen, setChosen] = useState<Point | null>(initial ? { label: initial.address, lat: initial.lat, lng: initial.lng } : null);
+  const lookup = useLookup<Point[]>(query.trim() ? `/geocode?q=${encodeURIComponent(query)}` : null);
 
   const { submit, error, busy } = useSubmit(async () => {
-    const fromSuggestion = chosen?.label === address ? { lat: chosen.lat, lng: chosen.lng } : {};
-    await api('/me/home', { method: 'PUT', body: { address, ...fromSuggestion } });
+    if (!chosen) return;
+    await api('/me/home', { method: 'PUT', body: { address: chosen.label, lat: chosen.lat, lng: chosen.lng } });
     onSaved();
   });
   const type = (text: string) => {
@@ -54,7 +49,7 @@ export function HomeAddressForm({ initial = '', hint, submitLabel, onSaved, chil
     setQuery(text);
     setChosen(null);
   };
-  const choose = (s: Suggestion) => {
+  const choose = (s: Point) => {
     setAddress(s.label);
     setQuery('');
     setChosen(s);
@@ -64,122 +59,17 @@ export function HomeAddressForm({ initial = '', hint, submitLabel, onSaved, chil
     <form noValidate onSubmit={submit} className="flex flex-col gap-3.5">
       <Field label="Address" value={address} onChange={(e) => type(e.target.value)} autoComplete="off" autoFocus error={error} hint={hint} />
       <p data-testid="address-status" role="status" aria-live="polite" className="sr-only">
-        {lookupAnnouncement(lookup)}
+        {lookupAnnouncement(lookup, 'addresses')}
       </p>
-      {lookup.status === 'unavailable' && <Notice tone="info">Address suggestions are unavailable right now. You can still type your full address and save it.</Notice>}
-      {(lookup.status === 'searching' || lookup.status === 'found') && <SuggestionList lookup={lookup} onChoose={choose} />}
+      {lookup.status === 'failed' && <Notice tone="info">Address suggestions are unavailable right now. Try again in a moment.</Notice>}
+      {(lookup.status === 'searching' || lookup.status === 'found') && (
+        <SuggestionList lookup={lookup} noun="addresses" keyOf={(s) => `${s.label}|${s.lat}|${s.lng}`} render={(s) => s.label} onChoose={choose} />
+      )}
       {chosen && <MapPreview point={chosen} />}
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" disabled={busy || !chosen}>
         {submitLabel}
       </Button>
       {children}
     </form>
-  );
-}
-
-function SuggestionList({ lookup, onChoose }: { lookup: Extract<Lookup, { status: 'searching' | 'found' }>; onChoose: (s: Suggestion) => void }) {
-  return (
-    <ul aria-label="Suggestions" className="flex flex-col divide-y divide-divider overflow-hidden rounded-[18px] bg-white ring-1 ring-edge">
-      {lookup.status === 'searching' ? (
-        <li className="flex items-center gap-2.5 px-3.5 py-2.5 font-semibold text-muted">
-          <span data-testid="spinner" aria-hidden="true" className="size-4 flex-none animate-spin rounded-full border-2 border-soft border-t-tomato" />
-          Searching addresses…
-        </li>
-      ) : lookup.suggestions.length === 0 ? (
-        <li className="px-3.5 py-2.5 text-muted">No matching addresses</li>
-      ) : (
-        lookup.suggestions.map((s) => (
-          <li key={`${s.label}|${s.lat}|${s.lng}`}>
-            <button type="button" onClick={() => onChoose(s)} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-[#fffaf6]">
-              <MapPin size={16} className="flex-none text-muted" aria-hidden="true" />
-              {s.label}
-            </button>
-          </li>
-        ))
-      )}
-    </ul>
-  );
-}
-
-type Lookup = { status: 'idle' } | { status: 'searching' } | { status: 'found'; suggestions: Suggestion[] } | { status: 'unavailable' };
-
-/**
- * Suggestions for what's been typed, looked up once typing pauses. It's "searching" from the first keystroke
- * until the answer for exactly what's typed now arrives; answers to older keystrokes are dropped.
- */
-function useAddressSuggestions(query: string): Lookup {
-  const [answer, setAnswer] = useState<{ query: string; suggestions: Suggestion[] | null } | null>(null);
-  useEffect(() => {
-    if (!query.trim()) return;
-    let alive = true;
-    const timer = setTimeout(
-      () =>
-        api<Suggestion[]>(`/geocode?q=${encodeURIComponent(query)}`).then(
-          (suggestions) => alive && setAnswer({ query, suggestions }),
-          () => alive && setAnswer({ query, suggestions: null }),
-        ),
-      SUGGEST_DELAY_MS,
-    );
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-    };
-  }, [query]);
-  if (!query.trim()) return { status: 'idle' };
-  if (answer?.query !== query) return { status: 'searching' };
-  return answer.suggestions ? { status: 'found', suggestions: answer.suggestions } : { status: 'unavailable' };
-}
-
-/** What screen readers hear as the lookup goes (the unavailable Notice speaks for itself). */
-function lookupAnnouncement(lookup: Lookup) {
-  if (lookup.status === 'searching') return 'Searching…';
-  if (lookup.status !== 'found') return '';
-  return lookup.suggestions.length ? `${plural(lookup.suggestions.length, 'suggestion')} found` : 'No matching addresses';
-}
-
-const ZOOM = 16;
-const TILE = 256;
-
-/** Where a point falls on the OpenStreetMap tile grid at ZOOM, in tiles (Web Mercator). */
-function tileXY({ lat, lng }: { lat: number; lng: number }) {
-  const n = 2 ** ZOOM;
-  const latRad = (lat * Math.PI) / 180;
-  return { x: ((lng + 180) / 360) * n, y: ((1 - Math.asinh(Math.tan(latRad)) / Math.PI) / 2) * n };
-}
-
-/**
- * A static map: the 3×3 OpenStreetMap tiles around the point, shifted so the point sits in the middle, under a pin.
- * ponytail: ignores the antimeridian and the poles; nobody's home is there.
- */
-function MapPreview({ point }: { point: Suggestion }) {
-  const { x, y } = tileXY(point);
-  const tiles = [-1, 0, 1].flatMap((dy) => [-1, 0, 1].map((dx) => ({ tx: Math.floor(x) + dx, ty: Math.floor(y) + dy })));
-  return (
-    <figure className="relative h-40 overflow-hidden rounded-[18px] bg-soft ring-1 ring-edge">
-      <div role="img" aria-label={`Map of ${point.label}`} className="absolute inset-0">
-        {tiles.map(({ tx, ty }) => (
-          <img
-            key={`${tx},${ty}`}
-            src={`https://tile.openstreetmap.org/${ZOOM}/${tx}/${ty}.png`}
-            alt=""
-            width={TILE}
-            height={TILE}
-            className="absolute max-w-none"
-            style={{ left: `calc(50% + ${(tx - x) * TILE}px)`, top: `calc(50% + ${(ty - y) * TILE}px)` }}
-          />
-        ))}
-        <MapPin
-          data-testid="map-marker"
-          size={32}
-          aria-hidden="true"
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full fill-tomato text-ink"
-        />
-      </div>
-      <figcaption className="absolute right-0 bottom-0 rounded-tl-lg bg-white/85 px-1.5 py-0.5 text-[11px]">
-        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
-          © OpenStreetMap contributors
-        </a>
-      </figcaption>
-    </figure>
   );
 }

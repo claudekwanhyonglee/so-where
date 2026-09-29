@@ -37,7 +37,7 @@ export function createApp(deps: Deps) {
   app.get('/health', (c) => c.json({ ok: true }));
   app.use('*', inviteGate(config.inviteCode));
 
-  app.route('/api', authRoutes(deps, nominatim));
+  app.route('/api', authRoutes(deps));
   app.use('/api/*', requirePerson(db));
   app.route('/api/places', placesRoutes(deps, nominatim));
   app.route('/api/import', importRoutes(deps, placeLookup));

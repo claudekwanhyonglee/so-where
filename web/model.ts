@@ -32,7 +32,12 @@ export function relativeDay(then: number, now = Date.now()) {
   return days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : `${days} days ago`;
 }
 
-export const googleMapsUrl = (place: Pick<Place, 'key'>) => `https://maps.google.com/?cid=${place.key}`;
+/** Google's own page for places added from a Google Maps link (keyed by cid); a search for the name there for the rest. */
+export function googleMapsUrl({ key, name, lat, lng }: Pick<Place, 'key' | 'name' | 'lat' | 'lng'>) {
+  if (/^\d+$/.test(key)) return `https://maps.google.com/?cid=${key}`;
+  const query = lat === null || lng === null ? name : `${name} ${lat},${lng}`;
+  return `https://www.google.com/maps/search/?${new URLSearchParams({ api: '1', query })}`;
+}
 
 export type TransitAnswer = { minutes: number } | { minutes: null; reason: 'no-home' | 'no-location' | 'no-trip' | 'unavailable' };
 

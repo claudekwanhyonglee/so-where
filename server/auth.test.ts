@@ -2,6 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { createHash, scryptSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { configFromEnv } from './config.ts';
+import { openDb } from './db.ts';
+import { createNominatim } from './nominatim.ts';
 import { hashPin, verifyPin } from './pin.ts';
 import { resetPin } from './reset-pin.ts';
 import { device, fakeFetch, fakeNominatim, INVITE, signedInDevice, testApp } from './test-helpers.ts';
@@ -203,40 +205,30 @@ describe('#3 AC7: changing and resetting a PIN', () => {
 });
 
 describe('#3 AC8: home address', () => {
-  it('geocodes and saves the address, and it can be changed', async () => {
-    const places = { '1 Pretend St, Carlton': { lat: -37.8, lng: 144.97 }, '5 Madeup Rd, Windsor': { lat: -37.85, lng: 144.99 } };
-    const { app } = testApp({ fetch: fakeFetch(fakeNominatim(places)) });
+  it('saves the chosen address, and it can be changed', async () => {
+    const { app } = testApp();
     const phone = await signedInDevice(app);
 
-    expect((await phone.put('/api/me/home', { address: '1 Pretend St, Carlton' })).status).toBe(200);
-    expect((await (await phone.get('/api/me')).json()).home).toMatchObject({ address: '1 Pretend St, Carlton', lat: -37.8, lng: 144.97 });
+    expect((await phone.put('/api/me/home', { address: '1 Pretend St, Carlton', lat: -37.8, lng: 144.97 })).status).toBe(200);
+    expect((await (await phone.get('/api/me')).json()).home).toEqual({ address: '1 Pretend St, Carlton', lat: -37.8, lng: 144.97 });
 
-    expect((await phone.put('/api/me/home', { address: '5 Madeup Rd, Windsor' })).status).toBe(200);
-    expect((await (await phone.get('/api/me')).json()).home).toMatchObject({ address: '5 Madeup Rd, Windsor', lat: -37.85 });
-  });
-
-  it('an address that cannot be found is an error and changes nothing', async () => {
-    const { app } = testApp({ fetch: fakeFetch(fakeNominatim({})) });
-    const phone = await signedInDevice(app);
-    const res = await phone.put('/api/me/home', { address: 'Nowhere Lane' });
-    expect(res.status).toBe(422);
-    expect((await res.json()).error).toMatch(/couldn.t find/i);
-    expect((await (await phone.get('/api/me')).json()).home).toBeNull();
+    expect((await phone.put('/api/me/home', { address: '5 Madeup Rd, Windsor', lat: -37.85, lng: 144.99 })).status).toBe(200);
+    expect((await (await phone.get('/api/me')).json()).home).toEqual({ address: '5 Madeup Rd, Windsor', lat: -37.85, lng: 144.99 });
   });
 
   it('calls Nominatim with an identifying User-Agent and caches results', async () => {
     const calls: { url: string; ua: string | null }[] = [];
-    const nominatim = fakeNominatim({ '1 Pretend St, Carlton': { lat: -37.8, lng: 144.97 } });
-    const { app } = testApp({
-      fetch: fakeFetch((url, init) => {
+    const fake = fakeNominatim({ '1 Pretend St, Carlton': { lat: -37.8, lng: 144.97 } });
+    const nominatim = createNominatim(
+      openDb(':memory:'),
+      fakeFetch((url, init) => {
         calls.push({ url: url.href, ua: new Headers(init?.headers).get('user-agent') });
-        return nominatim(url, init);
+        return fake(url, init);
       }),
-    });
-    const a = await signedInDevice(app, 'A');
-    const b = await signedInDevice(app, 'B');
-    await a.put('/api/me/home', { address: '1 Pretend St, Carlton' });
-    await b.put('/api/me/home', { address: '1 Pretend St, Carlton' });
+      0,
+    );
+    expect(await nominatim.search('1 Pretend St, Carlton')).toEqual({ lat: -37.8, lng: 144.97 });
+    expect(await nominatim.search('1 Pretend St, Carlton')).toEqual({ lat: -37.8, lng: 144.97 });
     expect(calls).toHaveLength(1);
     expect(calls[0].ua).toMatch(/so-where/);
   });

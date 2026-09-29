@@ -193,7 +193,7 @@ test('#38 AC4: "Add a place" and "Import" use the usual sheets over Home; two pl
 
   await places.getByRole('button', { name: 'Add a place' }).click();
   const sheet = page.getByRole('dialog', { name: 'Add a place' });
-  await sheet.getByLabel('Google Maps link').fill(placeLink(uniqueName('Pretend Bistro ')));
+  await sheet.getByLabel('Name or Google Maps link').fill(placeLink(uniqueName('Pretend Bistro ')));
   await sheet.getByRole('button', { name: 'Add place' }).click();
   await expect(sheet).toBeHidden();
   await expect(places).toContainText('1 of 2 added');
