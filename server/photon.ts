@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Deps } from './app.ts';
 import { countryCode, type AppEnv } from './auth.ts';
 import { USER_AGENT, type LatLng } from './nominatim.ts';
+import { groupCentre } from './place-lookup.ts';
 
 const MAX_SUGGESTIONS = 5;
 
@@ -37,24 +38,26 @@ async function photon(fetchFn: typeof fetch, q: string, extra: [string, string][
 
 const FOOD_AND_DRINK = ['restaurant', 'cafe', 'bar', 'pub', 'fast_food', 'food_court', 'ice_cream', 'biergarten'].map((v): [string, string] => ['osm_tag', `amenity:${v}`]);
 
+/** Photon parameters favouring results near `near`, if given. */
+const towards = (near?: LatLng): [string, string][] => (near ? [['lat', String(near.lat)], ['lon', String(near.lng)]] : []);
+
 /** Food and drink places matching `q`, favouring ones near `near`. Keyed by OSM type and id, e.g. "osm:N123". */
 export async function searchPlaces(fetchFn: typeof fetch, q: string, near?: LatLng): Promise<PlaceResult[]> {
-  const bias: [string, string][] = near ? [['lat', String(near.lat)], ['lon', String(near.lng)]] : [];
-  return (await photon(fetchFn, q, [...FOOD_AND_DRINK, ...bias]))
+  return (await photon(fetchFn, q, [...FOOD_AND_DRINK, ...towards(near)]))
     .filter((f) => f.properties.name)
     .map((f) => ({ key: `osm:${f.properties.osm_type}${f.properties.osm_id}`, name: String(f.properties.name), address: addressLine(f.properties), ...at(f) }));
 }
 
-export function geocodeRoutes({ fetch }: Deps) {
+export function geocodeRoutes({ db, fetch }: Deps) {
   const api = new Hono<AppEnv>();
-  /** Addresses matching `q`, in `country` (a two-letter code) if given. */
+  /** Addresses matching `q`, in `country` (a two-letter code) if given, favouring the area the group's places are in. */
   api.get('/', async (c) => {
     const q = c.req.query('q')?.trim();
     if (!q) return c.json([]);
     const country = countryCode(c.req.query('country'));
     const inCountry: [string, string][] = country ? [['countrycode', country]] : [];
     try {
-      return c.json((await photon(fetch, q, inCountry)).map((f): Suggestion => ({ label: label(f.properties), ...at(f) })));
+      return c.json((await photon(fetch, q, [...inCountry, ...towards(groupCentre(db))])).map((f): Suggestion => ({ label: label(f.properties), ...at(f) })));
     } catch {
       return c.json({ error: 'Address suggestions are unavailable right now.' }, 502);
     }

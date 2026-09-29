@@ -116,6 +116,29 @@ describe("#32 AC4: Photon can't be reached", () => {
   });
 });
 
+describe("#50: address suggestions lean towards the group's places", () => {
+  const placeLink = (hex: string, lat: number, lng: number) => `https://www.google.com/maps/place/Invented/@${lat},${lng},17z/data=!4m6!3m5!1s0x1:0x${hex}!8m2!3d${lat}!4d${lng}`;
+
+  it('#50 AC1: with located places, suggestions are biased to their centre as well as filtered by country', async () => {
+    const calls: { url: URL }[] = [];
+    const { alex } = await setup(fakePhoton([PRETEND_ST], { calls }));
+    await alex.post('/api/places', { url: placeLink('a1', -37.8, 144.96) });
+    await alex.post('/api/places', { url: placeLink('a2', -37.82, 144.98) });
+    await alex.get('/api/geocode?q=1%20Pretend&country=AU');
+    expect(Number(calls[0].url.searchParams.get('lat'))).toBeCloseTo(-37.81, 5);
+    expect(Number(calls[0].url.searchParams.get('lon'))).toBeCloseTo(144.97, 5);
+    expect(calls[0].url.searchParams.get('countrycode')).toBe('AU');
+  });
+
+  it('#50 AC2: with no located places, no bias', async () => {
+    const calls: { url: URL }[] = [];
+    const { alex } = await setup(fakePhoton([PRETEND_ST], { calls }));
+    await alex.get('/api/geocode?q=1%20Pretend&country=AU');
+    expect(calls[0].url.searchParams.has('lat')).toBe(false);
+    expect(calls[0].url.searchParams.has('lon')).toBe(false);
+  });
+});
+
 describe('#48: address suggestions filtered by country, and a home remembers its country', () => {
   const VIENNA_ST: PhotonPlace = {
     lat: 48.2,
