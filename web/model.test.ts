@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { relativeDay, swatch } from './model.ts';
+import { googleMapsUrl, relativeDay, swatch } from './model.ts';
+
+describe('#43 AC3: "Open in Google Maps" for every place', () => {
+  it('links a place from a Google Maps link by its cid', () => {
+    expect(googleMapsUrl({ key: '1234567890', name: 'Pretend Diner', lat: -37.8, lng: 144.96 })).toBe('https://maps.google.com/?cid=1234567890');
+  });
+
+  it('links a place added by search (no cid) by its name near its location', () => {
+    const url = new URL(googleMapsUrl({ key: 'osm:N9001', name: 'Pretend Trattoria', lat: -37.7985, lng: 144.967 }));
+    expect(url.href).not.toContain('cid=');
+    expect(url.origin + url.pathname).toBe('https://www.google.com/maps/search/');
+    expect(url.searchParams.get('api')).toBe('1');
+    expect(url.searchParams.get('query')).toBe('Pretend Trattoria -37.7985,144.967');
+  });
+});
 
 describe('#16 AC4: relative dates', () => {
   const at = (day: number, hour: number) => new Date(2026, 8, day, hour).getTime();
