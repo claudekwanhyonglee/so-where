@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from './api.ts';
 import type { Me } from './App.tsx';
+import { plural } from './model.ts';
 import { Button, Field, Notice, Sheet, useSubmit } from './ui.tsx';
 
 type Suggestion = { label: string; lat: number; lng: number };
@@ -14,7 +15,7 @@ export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me;
   const [address, setAddress] = useState(me.home?.address ?? '');
   const [query, setQuery] = useState(''); // what was typed; choosing a suggestion clears it
   const [chosen, setChosen] = useState<Suggestion | null>(null);
-  const { suggestions, unavailable } = useAddressSuggestions(query);
+  const lookup = useAddressSuggestions(query);
 
   const { submit, error, busy } = useSubmit(async () => {
     const fromSuggestion = chosen?.label === address ? { lat: chosen.lat, lng: chosen.lng } : {};
@@ -46,17 +47,29 @@ export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me;
           error={error}
           hint="Used to show how long public transport takes from your place, leaving now. Only you see your travel times."
         />
-        {unavailable && <Notice tone="info">Address suggestions are unavailable right now. You can still type your full address and save it.</Notice>}
-        {suggestions.length > 0 && (
+        <p data-testid="address-status" role="status" aria-live="polite" className="sr-only">
+          {lookupAnnouncement(lookup)}
+        </p>
+        {lookup.status === 'unavailable' && <Notice tone="info">Address suggestions are unavailable right now. You can still type your full address and save it.</Notice>}
+        {lookup.status !== 'idle' && lookup.status !== 'unavailable' && (
           <ul aria-label="Suggestions" className="flex flex-col divide-y divide-divider overflow-hidden rounded-[18px] bg-white ring-1 ring-edge">
-            {suggestions.map((s) => (
-              <li key={`${s.label}|${s.lat}|${s.lng}`}>
-                <button type="button" onClick={() => choose(s)} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-[#fffaf6]">
-                  <MapPin size={16} className="flex-none text-muted" aria-hidden="true" />
-                  {s.label}
-                </button>
+            {lookup.status === 'searching' ? (
+              <li className="flex items-center gap-2.5 px-3.5 py-2.5 font-semibold text-muted">
+                <span data-testid="spinner" aria-hidden="true" className="size-4 flex-none animate-spin rounded-full border-2 border-soft border-t-tomato" />
+                Searching addresses…
               </li>
-            ))}
+            ) : lookup.suggestions.length === 0 ? (
+              <li className="px-3.5 py-2.5 text-muted">No matching addresses</li>
+            ) : (
+              lookup.suggestions.map((s) => (
+                <li key={`${s.label}|${s.lat}|${s.lng}`}>
+                  <button type="button" onClick={() => choose(s)} className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-[#fffaf6]">
+                    <MapPin size={16} className="flex-none text-muted" aria-hidden="true" />
+                    {s.label}
+                  </button>
+                </li>
+              ))
+            )}
           </ul>
         )}
         {chosen && <MapPreview point={chosen} />}
@@ -73,29 +86,22 @@ export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me;
   );
 }
 
-/** Suggestions for what's been typed, once typing pauses. */
-function useAddressSuggestions(query: string) {
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [unavailable, setUnavailable] = useState(false);
+type Lookup = { status: 'idle' } | { status: 'searching' } | { status: 'found'; suggestions: Suggestion[] } | { status: 'unavailable' };
+
+/**
+ * Suggestions for what's been typed, looked up once typing pauses. It's "searching" from the first keystroke
+ * until the answer for exactly what's typed now arrives; answers to older keystrokes are dropped.
+ */
+function useAddressSuggestions(query: string): Lookup {
+  const [answer, setAnswer] = useState<{ query: string; suggestions: Suggestion[] | null } | null>(null);
   useEffect(() => {
+    if (!query.trim()) return;
     let alive = true;
-    if (!query.trim()) {
-      setSuggestions([]);
-      return;
-    }
     const timer = setTimeout(
       () =>
         api<Suggestion[]>(`/geocode?q=${encodeURIComponent(query)}`).then(
-          (found) => {
-            if (!alive) return;
-            setSuggestions(found);
-            setUnavailable(false);
-          },
-          () => {
-            if (!alive) return;
-            setSuggestions([]);
-            setUnavailable(true);
-          },
+          (suggestions) => alive && setAnswer({ query, suggestions }),
+          () => alive && setAnswer({ query, suggestions: null }),
         ),
       SUGGEST_DELAY_MS,
     );
@@ -104,7 +110,16 @@ function useAddressSuggestions(query: string) {
       clearTimeout(timer);
     };
   }, [query]);
-  return { suggestions, unavailable };
+  if (!query.trim()) return { status: 'idle' };
+  if (answer?.query !== query) return { status: 'searching' };
+  return answer.suggestions ? { status: 'found', suggestions: answer.suggestions } : { status: 'unavailable' };
+}
+
+/** What screen readers hear as the lookup goes (the unavailable Notice speaks for itself). */
+function lookupAnnouncement(lookup: Lookup) {
+  if (lookup.status === 'searching') return 'Searching…';
+  if (lookup.status !== 'found') return '';
+  return lookup.suggestions.length ? `${plural(lookup.suggestions.length, 'suggestion')} found` : 'No matching addresses';
 }
 
 const ZOOM = 16;
