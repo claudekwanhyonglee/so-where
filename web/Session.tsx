@@ -1,7 +1,7 @@
 import { Ban, ChevronLeft, Copy, ExternalLink, Share2, TramFront } from 'lucide-react';
 import { startTransition, useCallback, useEffect, useRef, useState, ViewTransition } from 'react';
 import { toast } from 'sonner';
-import { api, errorMessage } from './api.ts';
+import { api, ApiError, errorMessage } from './api.ts';
 import { Leaderboard, type Board } from './Leaderboard.tsx';
 import { googleMapsUrl, plural, swatch, transitDirectionsUrl } from './model.ts';
 import { Link } from './router.tsx';
@@ -17,11 +17,39 @@ const INFO_POLL_MS = 3000;
 const BOARD_POLL_MS = 2000;
 
 
+/** `api` for calls about this session: a 404 means someone deleted it. */
+type SessionApi = <T>(path: string, init?: Parameters<typeof api>[1]) => Promise<T>;
+
 export function SessionPage({ id, meId }: { id: string; meId: number }) {
-  const info = usePolling(useCallback(() => api<SessionInfo>(`/sessions/${id}`), [id]), INFO_POLL_MS);
+  const [deleted, setDeleted] = useState(false);
+  const call = useCallback(
+    <T,>(path: string, init?: Parameters<typeof api>[1]) =>
+      api<T>(path, init).catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 404) setDeleted(true);
+        throw err;
+      }),
+    [],
+  );
+  return deleted ? <SessionDeleted /> : <LiveSession id={id} meId={meId} call={call} />;
+}
+
+function SessionDeleted() {
+  return (
+    <Card className="flex flex-col items-center gap-2.5 py-8 text-center">
+      <b>This session was deleted</b>
+      <span className="text-muted">Start a new one to keep picking.</span>
+      <Link to="/" className="font-bold text-tomato underline">
+        Back to Home
+      </Link>
+    </Card>
+  );
+}
+
+function LiveSession({ id, meId, call }: { id: string; meId: number; call: SessionApi }) {
+  const info = usePolling(useCallback(() => call<SessionInfo>(`/sessions/${id}`), [id, call]), INFO_POLL_MS);
   // `version` changes whenever this device picks, so the board refreshes straight away too.
   const [version, setVersion] = useState(0);
-  const board = usePolling(useCallback(() => api<Board>(`/sessions/${id}/leaderboard?v=${version}`), [id, version]), BOARD_POLL_MS);
+  const board = usePolling(useCallback(() => call<Board>(`/sessions/${id}/leaderboard?v=${version}`), [id, version, call]), BOARD_POLL_MS);
   const [view, setView] = useState<'pick' | 'board'>('pick');
   const [sharing, setSharing] = useState(false);
   if (!info) return null;
@@ -57,7 +85,7 @@ export function SessionPage({ id, meId }: { id: string; meId: number }) {
       {info.members.length === 1 && <SoloBanner onShare={share} />}
       <div className="grid gap-5 desk:grid-cols-[minmax(0,1fr)_340px] desk:items-start">
         <div className={shownOnPhone('pick')}>
-          <Picker sessionId={id} onChanged={() => setVersion((v) => v + 1)} />
+          <Picker sessionId={id} call={call} onChanged={() => setVersion((v) => v + 1)} />
         </div>
         <div className={`desk:sticky desk:top-4 ${shownOnPhone('board')}`}>
           <Leaderboard board={board} />
@@ -156,7 +184,7 @@ const PICK_FEEDBACK_MS = 280;
 const TIE_FEEDBACK_MS = 120;
 const MILESTONES: Record<number, string> = { 10: '10 picks! Your top 3 is taking shape.', 25: '25 picks. You really care about dinner.' };
 
-function Picker({ sessionId, onChanged }: { sessionId: string; onChanged: () => void }) {
+function Picker({ sessionId, call, onChanged }: { sessionId: string; call: SessionApi; onChanged: () => void }) {
   const [state, setState] = useState<PairResponse | null>(null);
   const [chosen, setChosen] = useState<number | 'tie' | null>(null);
   const [error, setError] = useState('');
@@ -164,8 +192,8 @@ function Picker({ sessionId, onChanged }: { sessionId: string; onChanged: () => 
   const base = `/sessions/${sessionId}`;
 
   useEffect(() => {
-    api<PairResponse>(`${base}/pair`).then(setState, (err) => setError(errorMessage(err)));
-  }, [base]);
+    call<PairResponse>(`${base}/pair`).then(setState, (err) => setError(errorMessage(err)));
+  }, [base, call]);
 
   /** Swaps in the next pair as a view transition: the old pair fades, the new one slides in. */
   const show = (next: PairResponse) => {
@@ -198,12 +226,12 @@ function Picker({ sessionId, onChanged }: { sessionId: string; onChanged: () => 
   const choose = async (winner: number | null) => {
     if (!pair) return;
     setChosen(winner ?? 'tie');
-    const next = await answer(() => api<PairResponse>(`${base}/picks`, { body: { a: pair[0].id, b: pair[1].id, winner } }), winner === null ? TIE_FEEDBACK_MS : PICK_FEEDBACK_MS);
+    const next = await answer(() => call<PairResponse>(`${base}/picks`, { body: { a: pair[0].id, b: pair[1].id, winner } }), winner === null ? TIE_FEEDBACK_MS : PICK_FEEDBACK_MS);
     if (next && MILESTONES[next.picks]) toast(MILESTONES[next.picks]);
   };
-  const undoVeto = (place: CardPlace) => api<PairResponse>(`${base}/vetoes/${place.id}`, { method: 'DELETE' }).then(show, (err) => setError(errorMessage(err)));
+  const undoVeto = (place: CardPlace) => call<PairResponse>(`${base}/vetoes/${place.id}`, { method: 'DELETE' }).then(show, (err) => setError(errorMessage(err)));
   const veto = async (place: CardPlace) => {
-    const next = await answer(() => api<PairResponse>(`${base}/vetoes`, { body: { placeId: place.id } }));
+    const next = await answer(() => call<PairResponse>(`${base}/vetoes`, { body: { placeId: place.id } }));
     if (next) toast(`${place.name} is out for tonight`, { action: { label: 'Undo', onClick: () => void undoVeto(place) } });
   };
 

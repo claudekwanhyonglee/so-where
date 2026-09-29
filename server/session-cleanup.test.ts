@@ -83,6 +83,23 @@ describe('#29 AC3: MAX_SESSIONS setting', () => {
   });
 });
 
+describe('#30 AC1: DELETE /api/sessions/:id', () => {
+  it('anyone signed in can delete a session; it then 404s everywhere', async () => {
+    const { alex, jo, start } = await setup();
+    const id = await start();
+    const other = await start();
+    expect((await jo.del(`/api/sessions/${id}`)).status).toBe(200); // Jo didn't start it and never joined
+    for (const path of ['', '/pair', '/leaderboard']) expect((await alex.get(`/api/sessions/${id}${path}`)).status, path).toBe(404);
+    const listed = (await (await alex.get('/api/sessions')).json()).map((s: { id: string }) => s.id);
+    expect(listed).toEqual([other]);
+  });
+
+  it('deleting an unknown session is a 404', async () => {
+    const { alex } = await setup();
+    expect((await alex.del('/api/sessions/nope')).status).toBe(404);
+  });
+});
+
 describe('#29 AC4: .env.example documents MAX_SESSIONS', () => {
   it('lists it in the optional section with its default and a one-line explanation', () => {
     const example = readFileSync('.env.example', 'utf8');

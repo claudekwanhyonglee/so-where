@@ -188,6 +188,12 @@ export function sessionsRoutes({ db, config, now, fetch }: Deps) {
     });
   });
 
+  /** Anyone may delete any session (there are no admins); its members, picks etc. cascade. History, and so rankings, stay. */
+  api.delete('/:id', (c) => {
+    const { changes } = db.prepare('DELETE FROM sessions WHERE id = ?').run(c.req.param('id'));
+    return changes ? c.json({ ok: true }) : notFound(c);
+  });
+
   api.post('/:id/join', (c) => (withSession(c) ? c.json({ ok: true }) : notFound(c)));
 
   api.get('/:id/pair', (c) => {
