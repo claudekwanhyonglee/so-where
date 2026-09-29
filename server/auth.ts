@@ -2,10 +2,11 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { Hono } from 'hono';
+import countries from 'flag-icons/country.json' with { type: 'json' };
 import type { Deps } from './app.ts';
 import { hashPin, isValidPin, verifyPin } from './pin.ts';
 
-export type Person = { id: number; name: string; home_address: string | null; home_lat: number | null; home_lng: number | null; home_skipped: number; guide_closed: number };
+export type Person = { id: number; name: string; home_address: string | null; home_lat: number | null; home_lng: number | null; home_country: string | null; home_skipped: number; guide_closed: number };
 export type AppEnv = { Variables: { person: Person } };
 
 const INVITE_COOKIE = 'sw_invite';
@@ -55,7 +56,7 @@ export function currentPerson(db: Deps['db'], c: Context): Person | undefined {
   if (!token) return undefined;
   return db
     .prepare(
-      `SELECT p.id, p.name, p.home_address, p.home_lat, p.home_lng, p.home_skipped, p.guide_closed
+      `SELECT p.id, p.name, p.home_address, p.home_lat, p.home_lng, p.home_country, p.home_skipped, p.guide_closed
        FROM device_sessions s JOIN people p ON p.id = s.person_id WHERE s.token_hash = ?`,
     )
     .get(tokenHash(token)) as Person | undefined;
@@ -72,6 +73,11 @@ export const requirePerson =
 
 /** A latitude (limit 90) or longitude (limit 180) from a request body: a real, finite number within ±limit. */
 export const isCoordinate = (value: unknown, limit: number): value is number => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= limit;
+
+const COUNTRY_CODES = new Set(countries.filter((c) => c.iso).map((c) => c.code.toUpperCase()));
+
+/** An ISO country code (e.g. "AU"), uppercased, or null. The same list the country picker offers. */
+export const countryCode = (value: unknown) => (typeof value === 'string' && COUNTRY_CODES.has(value.toUpperCase()) ? value.toUpperCase() : null);
 
 export function authRoutes({ db, config, now }: Deps) {
   const api = new Hono<AppEnv>();
@@ -129,8 +135,8 @@ export function authRoutes({ db, config, now }: Deps) {
   me.use(requirePerson(db));
 
   me.get('/', (c) => {
-    const { id, name, home_address, home_lat, home_lng, home_skipped, guide_closed } = c.var.person;
-    const home = home_address === null ? null : { address: home_address, lat: home_lat, lng: home_lng };
+    const { id, name, home_address, home_lat, home_lng, home_country, home_skipped, guide_closed } = c.var.person;
+    const home = home_address === null ? null : { address: home_address, lat: home_lat, lng: home_lng, country: home_country };
     return c.json({ id, name, home, homeSkipped: !!home_skipped, guideClosed: !!guide_closed });
   });
 
@@ -147,14 +153,16 @@ export function authRoutes({ db, config, now }: Deps) {
     return c.json({ ok: true });
   });
 
-  /** {address, lat, lng} from a chosen suggestion, stored as given. Free text is never looked up. */
+  /** {address, lat, lng} from a chosen suggestion, stored as given, with the picked country. Free text is never looked up. */
   me.put('/home', async (c) => {
-    const { address: raw, lat, lng } = await c.req.json();
+    const { address: raw, lat, lng, country: rawCountry } = await c.req.json();
     const address = String(raw ?? '').trim();
+    const country = countryCode(rawCountry);
     if (!address) return c.json({ error: 'Enter an address.' }, 400);
+    if (!country) return c.json({ error: 'Pick a country first.' }, 400);
     if (!isCoordinate(lat, 90) || !isCoordinate(lng, 180)) return c.json({ error: 'Choose your address from the suggestions.' }, 400);
-    db.prepare('UPDATE people SET home_address = ?, home_lat = ?, home_lng = ? WHERE id = ?').run(address, lat, lng, c.var.person.id);
-    return c.json({ address, lat, lng });
+    db.prepare('UPDATE people SET home_address = ?, home_lat = ?, home_lng = ?, home_country = ? WHERE id = ?').run(address, lat, lng, country, c.var.person.id);
+    return c.json({ address, lat, lng, country });
   });
 
   api.route('/me', me);

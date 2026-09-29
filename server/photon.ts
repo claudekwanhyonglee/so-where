@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Deps } from './app.ts';
-import type { AppEnv } from './auth.ts';
+import { countryCode, type AppEnv } from './auth.ts';
 import { USER_AGENT, type LatLng } from './nominatim.ts';
 
 const MAX_SUGGESTIONS = 5;
@@ -47,11 +47,14 @@ export async function searchPlaces(fetchFn: typeof fetch, q: string, near?: LatL
 
 export function geocodeRoutes({ fetch }: Deps) {
   const api = new Hono<AppEnv>();
+  /** Addresses matching `q`, in `country` (a two-letter code) if given. */
   api.get('/', async (c) => {
     const q = c.req.query('q')?.trim();
     if (!q) return c.json([]);
+    const country = countryCode(c.req.query('country'));
+    const inCountry: [string, string][] = country ? [['countrycode', country]] : [];
     try {
-      return c.json((await photon(fetch, q)).map((f): Suggestion => ({ label: label(f.properties), ...at(f) })));
+      return c.json((await photon(fetch, q, inCountry)).map((f): Suggestion => ({ label: label(f.properties), ...at(f) })));
     } catch {
       return c.json({ error: 'Address suggestions are unavailable right now.' }, 502);
     }

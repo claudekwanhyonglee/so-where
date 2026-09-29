@@ -209,11 +209,11 @@ describe('#3 AC8: home address', () => {
     const { app } = testApp();
     const phone = await signedInDevice(app);
 
-    expect((await phone.put('/api/me/home', { address: '1 Pretend St, Carlton', lat: -37.8, lng: 144.97 })).status).toBe(200);
-    expect((await (await phone.get('/api/me')).json()).home).toEqual({ address: '1 Pretend St, Carlton', lat: -37.8, lng: 144.97 });
+    expect((await phone.put('/api/me/home', { address: '1 Pretend St, Carlton', lat: -37.8, lng: 144.97, country: 'AU' })).status).toBe(200);
+    expect((await (await phone.get('/api/me')).json()).home).toEqual({ address: '1 Pretend St, Carlton', lat: -37.8, lng: 144.97, country: 'AU' });
 
-    expect((await phone.put('/api/me/home', { address: '5 Madeup Rd, Windsor', lat: -37.85, lng: 144.99 })).status).toBe(200);
-    expect((await (await phone.get('/api/me')).json()).home).toEqual({ address: '5 Madeup Rd, Windsor', lat: -37.85, lng: 144.99 });
+    expect((await phone.put('/api/me/home', { address: '5 Madeup Rd, Windsor', lat: -37.85, lng: 144.99, country: 'AU' })).status).toBe(200);
+    expect((await (await phone.get('/api/me')).json()).home).toEqual({ address: '5 Madeup Rd, Windsor', lat: -37.85, lng: 144.99, country: 'AU' });
   });
 
   it('calls Nominatim with an identifying User-Agent and caches results', async () => {

@@ -77,7 +77,7 @@ describe("#43 AC2: biased toward the group's places", () => {
 });
 
 describe("#47: with no group places, search leans towards the searcher's home", () => {
-  const HOME = { address: '1 Pretend St, Carlton', lat: -33.87, lng: 151.21 };
+  const HOME = { address: '1 Pretend St, Carlton', lat: -33.87, lng: 151.21, country: 'AU' };
   const biasOf = (url: URL) => [url.searchParams.get('lat'), url.searchParams.get('lon')];
 
   it('#47 AC1: no located places and a home: biased to the home', async () => {

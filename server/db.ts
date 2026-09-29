@@ -115,6 +115,9 @@ export const migrations: string[] = [
    ALTER TABLE people ADD COLUMN home_skipped INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE people ADD COLUMN guide_closed INTEGER NOT NULL DEFAULT 0;
    UPDATE people SET guide_closed = 1;`,
+
+  // The country picked with the home (ISO 3166-1 alpha-2, e.g. "AU"). NULL for homes saved before countries were asked.
+  `ALTER TABLE people ADD COLUMN home_country TEXT;`,
 ];
 
 export function migrate(db: Db, steps: string[] = migrations) {

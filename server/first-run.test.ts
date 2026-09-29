@@ -14,7 +14,7 @@ describe('#37 + epic: first-run columns on people', () => {
 
   it('closes the guide for everyone who already exists when the migration runs', () => {
     const db = new Database(':memory:');
-    migrate(db, migrations.slice(0, -1));
+    migrate(db, migrations.slice(0, 5));
     db.prepare("INSERT INTO people (name, pin_hash) VALUES ('Old timer', 'x')").run();
     migrate(db);
     expect(db.prepare('SELECT created_at, home_skipped, guide_closed FROM people').get()).toEqual({ created_at: 0, home_skipped: 0, guide_closed: 1 });
@@ -61,7 +61,7 @@ describe('#38 AC4 + AC6: guide progress comes from the server', () => {
     const alex = await signedInDevice(app, 'Alex');
     expect(await guide(alex)).toMatchObject({ closed: false, home: null, homeSkipped: false, placeCount: 0, inSession: false });
 
-    await alex.put('/api/me/home', { address: '1 Pretend St', lat: -37.8, lng: 144.96 });
+    await alex.put('/api/me/home', { address: '1 Pretend St', lat: -37.8, lng: 144.96, country: 'AU' });
     await addPlaces(alex, 2);
     await alex.post('/api/sessions', { setId: 'all' });
     expect(await guide(alex)).toMatchObject({ home: '1 Pretend St', homeSkipped: false, placeCount: 2, inSession: true });
@@ -101,7 +101,7 @@ describe('#38 AC5: starting (or joining) a session with home undecided marks hom
   it('with a home set, starting a session leaves home done, not skipped', async () => {
     const { app } = testApp({ fetch: fakeFetch(fakeNominatim()) });
     const alex = await signedInDevice(app, 'Alex');
-    await alex.put('/api/me/home', { address: '1 Pretend St', lat: -37.8, lng: 144.96 });
+    await alex.put('/api/me/home', { address: '1 Pretend St', lat: -37.8, lng: 144.96, country: 'AU' });
     await addPlaces(alex, 2);
     await alex.post('/api/sessions', { setId: 'all' });
     expect((await me(alex)).homeSkipped).toBe(false);
