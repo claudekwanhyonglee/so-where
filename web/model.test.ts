@@ -26,6 +26,16 @@ describe('#16 AC4: relative dates', () => {
   });
 });
 
+describe('#53: gold is only for the top pick', () => {
+  const ids = Array.from({ length: 200 }, (_, i) => i - 20);
+  it('#53 AC1: no id gets gold (#ffc93c) as its background', () => {
+    for (const id of ids) expect(swatch(id).bg.toLowerCase(), `id ${id}`).not.toBe('#ffc93c');
+  });
+  it('#53 AC2: the same id always gets the same colour', () => {
+    for (const id of ids) expect(swatch(id)).toEqual(swatch(id));
+  });
+});
+
 describe('#17 AC1: place colours', () => {
   it('are the same every time for the same place', () => {
     expect(swatch(7)).toEqual(swatch(7));

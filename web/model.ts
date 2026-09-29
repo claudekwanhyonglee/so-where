@@ -8,10 +8,9 @@ export type Place = {
   note: string;
 };
 
-/** Card colours with the ink that reads on them. Things get one by id, so a place is always the same colour. */
+/** Card colours with the ink that reads on them. Things get one by id, so a place is always the same colour. Gold (mustard) isn't one: it means "top pick". */
 const SWATCH = [
   { bg: '#e8432c', fg: '#fff4ec' },
-  { bg: '#ffc93c', fg: '#2a1712' },
   { bg: '#1f8a70', fg: '#fff4ec' },
   { bg: '#6a3d6e', fg: '#fff4ec' },
   { bg: '#ff8a5b', fg: '#2a1712' },
