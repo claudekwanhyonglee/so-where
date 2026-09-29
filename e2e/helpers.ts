@@ -66,6 +66,29 @@ export async function startPicking(page: Page, setName: string) {
   await expect(page).toHaveURL(/\/s\/[\w-]+$/);
 }
 
+/** The home sheet's fake Photon suggestion for "1 Pretend" (see e2e/server.ts). */
+export const PRETEND_ST_SUGGESTION = '1 Pretend Street, Carlton, Melbourne, Victoria, Australia';
+
+/** Serves OpenStreetMap map tiles from a blank stub, so map previews never reach the network. Returns the tile URLs asked for. */
+export async function stubMapTiles(page: Page) {
+  const requested: string[] = [];
+  await page.context().route('https://tile.openstreetmap.org/**', (route) => {
+    requested.push(route.request().url());
+    return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"/>' });
+  });
+  return requested;
+}
+
+/** In the open Home address sheet: type, choose the suggestion, and save it. */
+export async function saveHomeFromSuggestion(page: Page) {
+  await stubMapTiles(page);
+  const sheet = page.getByRole('dialog', { name: 'Home address' });
+  await sheet.getByLabel('Address').fill('1 Pretend');
+  await sheet.getByRole('button', { name: PRETEND_ST_SUGGESTION }).click();
+  await sheet.getByRole('button', { name: 'Save address' }).click();
+  await expect(sheet).toBeHidden();
+}
+
 /** A fresh browser (as if another device) with a new person signed in. */
 export async function newPerson(browser: Browser, prefix: string, path = '/') {
   const context = await browser.newContext();

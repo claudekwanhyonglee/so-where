@@ -41,6 +41,26 @@ export function fakeTransitous(durations: number[], opts: { status?: number; cal
   };
 }
 
+export type PhotonPlace = { lat: number; lng: number; properties: Record<string, string> };
+
+/**
+ * Fake Photon: answers with every place whose properties contain the query (ignoring `limit`, so callers must cap),
+ * as GeoJSON features, or with `status` if set.
+ */
+export function fakePhoton(places: PhotonPlace[], opts: { status?: number; calls?: { url: URL; init?: RequestInit }[] } = {}): Route {
+  return (url, init) => {
+    if (url.hostname !== 'photon.komoot.io') return;
+    opts.calls?.push({ url, init });
+    if (opts.status) return new Response('unavailable', { status: opts.status });
+    const q = (url.searchParams.get('q') ?? '').toLowerCase();
+    const hits = places.filter((p) => Object.values(p.properties).join(' ').toLowerCase().includes(q));
+    return json({
+      type: 'FeatureCollection',
+      features: hits.map((p) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lng, p.lat] }, properties: p.properties })),
+    });
+  };
+}
+
 export function testApp(opts: { fetch?: typeof fetch; now?: () => number; config?: Partial<Config> } = {}) {
   const db = openDb(':memory:');
   const config: Config = {
