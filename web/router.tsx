@@ -24,14 +24,19 @@ addEventListener('popstate', (e) => {
   if (e.isTrusted) restoreScroll(scrolledTo.get(entryKey()) ?? 0); // Back or Forward, not `navigate`
 });
 
-/** Scrolls to `y`, trying again each frame (for up to a second) while the page is still too short to get there. */
+/**
+ * Scrolls to `y` once the page has changed over, and keeps it there for a few frames while the new page settles,
+ * trying again each frame (for up to a second) while the page is still too short to get there.
+ */
 function restoreScroll(y: number) {
   const giveUpAt = performance.now() + 1000;
+  let framesThere = 0;
   const attempt = () => {
     scrollTo(0, y);
-    if (Math.abs(scrollY - y) > 1 && performance.now() < giveUpAt) requestAnimationFrame(attempt);
+    framesThere = Math.abs(scrollY - y) <= 1 ? framesThere + 1 : 0;
+    if (framesThere < 3 && performance.now() < giveUpAt) requestAnimationFrame(attempt);
   };
-  attempt();
+  requestAnimationFrame(attempt);
 }
 
 export function usePath() {

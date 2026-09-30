@@ -20,14 +20,17 @@ async function swipeUp(page: Page, x: number, y: number) {
   await cdp.detach();
 }
 
-async function placesWithASet(browser: import('@playwright/test').Browser, count: number) {
+/** A new person with `count` places, and `sets` sets (the first holding the first place). */
+async function placesWithASet(browser: import('@playwright/test').Browser, count: number, sets = 1) {
   const me = await personNamed(browser, uniqueName('Scroller'));
   const placeIds: number[] = [];
   for (let i = 0; i < count; i++) placeIds.push((await (await me.request.post('/api/places', { data: { url: placeLink(uniqueName('Invented Stop ')) } })).json()).place.id);
-  const { id: setId } = await (await me.request.post('/api/sets', { data: { name: uniqueName('Scrolls ') } })).json();
+  const setIds: number[] = [];
+  for (let i = 0; i < sets; i++) setIds.push((await (await me.request.post('/api/sets', { data: { name: uniqueName('Scrolls ') } })).json()).id);
+  const [setId] = setIds;
   await me.request.put(`/api/sets/${setId}/places/${placeIds[0]}`);
   const close = async () => {
-    await me.request.delete(`/api/sets/${setId}`);
+    for (const id of setIds) await me.request.delete(`/api/sets/${id}`);
     for (const id of placeIds) await me.request.delete(`/api/places/${id}`);
     await me.close();
   };
@@ -72,7 +75,7 @@ test('#64 AC1: while a sheet is open, scrolling outside it leaves the page where
 });
 
 test('#64 AC2: an in-app link opens the next page at the top; Back and Forward put each page back where it was', async ({ browser }) => {
-  const { me, close } = await placesWithASet(browser, 30);
+  const { me, close } = await placesWithASet(browser, 30, 8); // enough sets for their list to scroll
   const s = PORTRAIT[2];
   const { page, context } = await openOn(browser, s, me.state);
   await page.goto('/places/all');
