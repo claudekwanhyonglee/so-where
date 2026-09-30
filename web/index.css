@@ -333,6 +333,12 @@
   .pick-pair.squeezed .pick-note {
     display: none;
   }
+  .pick-pair.squeezed .pick-body {
+    gap: 2px;
+  }
+  .pick-pair.squeezed .pick-pills {
+    padding-top: 4px;
+  }
 }
 
 /* Together board: a changed rank's ▲/▼ badge pops on, holds and fades; a new 1st grows its flame. */

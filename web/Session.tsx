@@ -317,7 +317,7 @@ function Picker({ sessionId, home, meId, board, call, onChanged }: { sessionId: 
   };
 
   return (
-    <section aria-label="Pick" className="flex h-full min-h-0 flex-col gap-3.5 [&>*]:flex-none">
+    <section aria-label="Pick" className="flex h-full min-h-0 flex-col gap-3.5 max-desk:has-[.squeezed]:gap-2.5 [&>*]:flex-none">
       <div className="flex items-center justify-between text-[13px]">
         <span className="text-muted">
           <span className="desk:hidden">Tap</span>
@@ -457,11 +457,11 @@ function PlaceCard({
       <button aria-label="Absolutely not" title="Absolutely not" onClick={onVeto} className={`absolute top-3.5 right-3.5 z-10 grid size-9 place-items-center rounded-full ${pill}`}>
         <Ban size={18} aria-hidden="true" />
       </button>
-      <div className="pointer-events-none relative flex flex-1 flex-col gap-[5px]">
+      <div className="pick-body pointer-events-none relative flex flex-1 flex-col gap-[5px]">
         <h3 className="pr-10 font-display text-[25px]/[1.08] desk:text-[40px]/[1.08]">{place.name}</h3>
         <span className="opacity-80">{place.suburb ?? 'Suburb unknown'}</span>
         {place.note && <span className="pick-note text-sm italic opacity-90">“{place.note}”</span>}
-        <div className="mt-auto flex flex-wrap gap-1.5 pt-2 [&>*]:inline-flex [&>*]:items-center [&>*]:gap-[5px] [&>*]:rounded-full [&>*]:px-[11px] [&>*]:py-[5px] [&>*]:text-[13px] [&>*]:font-bold [&>a]:pointer-events-auto">
+        <div className="pick-pills mt-auto flex flex-wrap gap-1.5 pt-2 [&>*]:inline-flex [&>*]:items-center [&>*]:gap-[5px] [&>*]:rounded-full [&>*]:px-[11px] [&>*]:py-[5px] [&>*]:text-[13px] [&>*]:font-bold [&>a]:pointer-events-auto">
           {shown === 'time' && (
             <a href={directions} target="_blank" rel="noreferrer" className={pill} title="By public transport from home, leaving now. Opens directions in Google Maps.">
               <TramFront size={16} aria-hidden="true" /> {transit?.minutes} min
