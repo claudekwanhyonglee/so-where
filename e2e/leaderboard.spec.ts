@@ -129,6 +129,8 @@ test('#18 AC5: a place that moved up since the last poll gets ▲', async ({ pag
   const host = await hostSession(page, 4);
   const [a, b, c, d] = host.places;
   for (const [winner, loser] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) await host.pick(winner.id, loser.id);
+  // A poll mid-setup would rightly show a ▲ for a place the rest of the setup moved up: start from a fresh board.
+  await page.reload();
   await expect(together(page).getByRole('listitem').last()).toContainText(d.name, { timeout: 5_000 });
   await expect(together(page)).not.toContainText('▲');
 
