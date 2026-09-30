@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { homeStep, INVITE, PRETEND_ST_SUGGESTION, signUp, signUpToHomeStep, stubMapTiles, uniqueName } from './helpers.ts';
+import { homeStep, INVITE, pickCountry, PRETEND_ST_SUGGESTION, signUp, signUpToHomeStep, stubMapTiles, uniqueName } from './helpers.ts';
 
 /** #42 AC5: every check runs in both places a home is set. */
 const WHERE: { name: string; open: (page: Page) => Promise<{ form: Locator; save: string }> }[] = [
@@ -8,6 +8,7 @@ const WHERE: { name: string; open: (page: Page) => Promise<{ form: Locator; save
     open: async (page) => {
       await page.goto(`/?invite=${INVITE}`);
       await signUpToHomeStep(page, uniqueName('Picker'));
+      await pickCountry(homeStep(page));
       return { form: homeStep(page), save: 'Save home' };
     },
   },
@@ -17,6 +18,7 @@ const WHERE: { name: string; open: (page: Page) => Promise<{ form: Locator; save
       await signUp(page, uniqueName('Picker'));
       await page.goto('/you');
       await page.getByRole('button', { name: /^Home address/ }).click();
+      await pickCountry(page.getByRole('dialog', { name: 'Home address' }));
       return { form: page.getByRole('dialog', { name: 'Home address' }), save: 'Save address' };
     },
   },

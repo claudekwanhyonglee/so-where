@@ -17,9 +17,9 @@ const externals = fakeFetch(
     {
       lat: -37.7991,
       lng: 144.9671,
-      properties: { housenumber: '1', street: 'Pretend Street', district: 'Carlton', city: 'Melbourne', state: 'Victoria', country: 'Australia' },
+      properties: { housenumber: '1', street: 'Pretend Street', district: 'Carlton', city: 'Melbourne', state: 'Victoria', country: 'Australia', countrycode: 'AU' },
     },
-    { lat: -37.85, lng: 144.99, properties: { housenumber: '5', street: 'Pretend Road', district: 'Windsor', city: 'Melbourne', state: 'Victoria', country: 'Australia' } },
+    { lat: -37.85, lng: 144.99, properties: { housenumber: '5', street: 'Pretend Road', district: 'Windsor', city: 'Melbourne', state: 'Victoria', country: 'Australia', countrycode: 'AU' } },
     {
       lat: -37.7985,
       lng: 144.967,

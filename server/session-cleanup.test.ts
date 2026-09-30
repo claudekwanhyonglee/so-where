@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { configFromEnv } from './config.ts';
 import { fakeFetch, fakeNominatim, fakeTransitous, signedInDevice, testApp } from './test-helpers.ts';
 
-const HOME = { address: '1 Pretend St, Carlton', lat: -37.79, lng: 144.97 };
+const HOME = { address: '1 Pretend St, Carlton', lat: -37.79, lng: 144.97, country: 'AU' };
 const placeLink = (hex: string, name: string) =>
   `https://www.google.com/maps/place/${name.replaceAll(' ', '+')}/@-37.8,144.96,17z/data=!4m6!3m5!1s0x1:0x${hex}!8m2!3d-37.8!4d144.96`;
 

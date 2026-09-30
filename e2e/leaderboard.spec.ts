@@ -76,34 +76,39 @@ test('#18 AC1: Together by default, a tab per member, and no tabs when alone', a
   await expect(board(page).getByRole('list', { name: `${friend.name}'s ranking` }).getByRole('listitem')).toHaveText(theirs.ranking.map((r) => new RegExp(r.name)));
 });
 
-test('#18 AC2 + AC3: top pick card, positions, a chip per member, and the bottom-third legend', async ({ page, browser }) => {
-  const host = await hostSession(page, 3);
-  // Alone: positions but no chips, so no legend.
+const MEDAL_RGB = { gold: 'rgb(255, 201, 60)', silver: 'rgb(228, 228, 232)', bronze: 'rgb(246, 210, 180)', grey: 'rgb(241, 235, 231)' };
+const ordinal = (n: number) => `${n}${['th', 'st', 'nd', 'rd'][n] ?? 'th'}`; // enough for the handful of places here
+const medalOf = (rank: number) => (['gold', 'silver', 'bronze'] as const)[rank - 1] ?? 'grey';
+const chip = (scope: import('@playwright/test').Locator, name: string, rank: number) => scope.getByText(`${name} ${ordinal(rank)}`, { exact: true });
+
+test('#18 AC2 + #55 AC1 + AC2: top pick card, positions, and a "<name> <ordinal>" chip per member in medal colours; no bottom-third marker', async ({ page, browser }) => {
+  const host = await hostSession(page, 4);
+  // Alone: positions but no chips.
   await expect(together(page).getByRole('listitem').first()).toContainText('2');
-  await expect(board(page).getByRole('note')).toHaveCount(0);
+  await expect(together(page).getByText(`${host.name} 2nd`)).toHaveCount(0);
 
   const friend = await newPerson(browser, 'Chippy', host.path);
   await expect(board(page).getByRole('tab', { name: friend.name })).toBeVisible({ timeout: 5_000 });
   const data = await host.data();
-  const [me, them] = [host.name, friend.name].map((n) => data.people.find((p) => p.name === n)!);
+  const rankOf = (who: string, placeId: number) => data.people.find((p) => p.name === who)!.ranking.findIndex((r) => r.placeId === placeId) + 1;
   const rows = together(page).getByRole('listitem');
-  for (const [i, row] of data.combined.slice(1).entries()) {
-    const item = rows.nth(i);
-    await expect(item).toContainText(String(i + 2));
-    for (const person of [me, them]) {
-      const rank = person.ranking.findIndex((r) => r.placeId === row.placeId) + 1;
-      await expect(item.getByTitle(`${person.name}: #${rank}`)).toContainText(`${person.name[0].toUpperCase()}${rank}`);
+  const cards = [topPick(page), ...data.combined.slice(1).map((_, i) => rows.nth(i))];
+  for (const [i, row] of data.combined.entries()) {
+    if (i > 0) await expect(rows.nth(i - 1)).toContainText(String(i + 1));
+    for (const who of [host.name, friend.name]) {
+      const rank = rankOf(who, row.placeId);
+      const c = chip(cards[i], who, rank);
+      await expect(c).toBeVisible();
+      await expect(c).toHaveCSS('background-color', MEDAL_RGB[medalOf(rank)]);
+      if (rank > 3) await expect(c).toHaveCSS('color', 'rgb(138, 122, 115)'); // grey text #8a7a73
+      await expect(c.getByTestId('flame')).toHaveCount(rank === 1 ? 1 : 0);
     }
   }
   await expect(topPick(page)).toContainText(data.combined[0].name);
 
-  // With three places, each person's #3 is in their bottom third: that chip is marked, and the legend explains it.
-  const last = data.combined.at(-1)!;
-  for (const id of last.bottomThirdFor) {
-    const who = data.people.find((p) => p.id === id)!;
-    await expect(rowFor(page, last.name).getByTitle(`${who.name}: #3`)).toContainText(`bottom third for ${who.name}`);
-  }
-  await expect(board(page).getByRole('note')).toContainText("bottom third");
+  // The bottom-third marker and its legend are gone.
+  await expect(board(page).getByRole('note')).toHaveCount(0);
+  await expect(board(page)).not.toContainText('bottom third');
 });
 
 test('#18 AC4: vetoed places sink below the rest, stamped, without a position', async ({ page }) => {
@@ -124,6 +129,8 @@ test('#18 AC5: a place that moved up since the last poll gets ▲', async ({ pag
   const host = await hostSession(page, 4);
   const [a, b, c, d] = host.places;
   for (const [winner, loser] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) await host.pick(winner.id, loser.id);
+  // A poll mid-setup would rightly show a ▲ for a place the rest of the setup moved up: start from a fresh board.
+  await page.reload();
   await expect(together(page).getByRole('listitem').last()).toContainText(d.name, { timeout: 5_000 });
   await expect(together(page)).not.toContainText('▲');
 
@@ -137,7 +144,7 @@ test('#18 AC5: a place that moved up since the last poll gets ▲', async ({ pag
 });
 
 for (const motion of ['no-preference', 'reduce'] as const) {
-  test(`#25 AC1–AC4 + AC6: the "Pretty sure" flame (${motion === 'reduce' ? 'still with reduced motion' : 'animated'})`, async ({ page, browser }) => {
+  test(`#25 AC1–AC4 + AC6 + #55 AC3 + AC4: "Pretty sure" sets the top card on fire (${motion === 'reduce' ? 'still with reduced motion' : 'animated'})`, async ({ page, browser }) => {
     await page.emulateMedia({ reducedMotion: motion });
     const host = await hostSession(page, 6);
     const friend = await newPerson(browser, 'Flame', host.path);
@@ -155,13 +162,29 @@ for (const motion of ['no-preference', 'reduce'] as const) {
       await expect(p.getByText(/\d\s*%/)).toHaveCount(0);
     }
 
-    // AC1: once everyone has 8+ picks and agrees, the top pick card shows the flame and the words.
+    // AC1 + #55 AC3: once everyone has 8+ picks and agrees, the top pick card gets a big "Statistically / Pretty sure"
+    // stamp over its top-right corner, warms up, and flames rise from behind it past its top edge.
     for (let round = 0; round < 3; round++) for (const who of [page, friend.page]) await agreeOnce(who);
     const card = topPick(page);
-    await expect(card.getByText('Statistically "Pretty sure"', { exact: true })).toBeVisible({ timeout: 5_000 });
+    const stamp = card.getByTestId('pretty-sure');
+    await expect(stamp).toBeVisible({ timeout: 5_000 });
+    await expect(stamp).toHaveText(/^Statistically\s*Pretty sure$/i);
+    const [cardBox, stampBox] = [(await card.boundingBox())!, (await stamp.boundingBox())!];
+    expect(stampBox.y).toBeLessThan(cardBox.y + 10); // over the top edge…
+    expect(stampBox.x + stampBox.width).toBeGreaterThan(cardBox.x + cardBox.width - 10); // …at the right
+    expect(await card.evaluate((el) => getComputedStyle(el).backgroundImage)).toMatch(/gradient/);
+    const fire = page.getByTestId('fire');
+    await expect(fire).toBeAttached();
+    expect((await fire.boundingBox())!.y).toBeLessThan(cardBox.y - 30); // rises past the top edge
+    expect(await fire.evaluate((el) => getComputedStyle(el).zIndex)).toBe('0'); // behind the card (z 1)
 
-    // AC2: a drawn flame in the palette, not an emoji or icon-font character.
-    const flame = card.getByTestId('flame');
+    // #55 AC4: the fire and heat move, except with reduced motion.
+    const blobStates = await fire.locator('i').evaluateAll((blobs) => [...new Set(blobs.map((b) => getComputedStyle(b).animationPlayState))]);
+    expect(blobStates).toEqual([motion === 'reduce' ? 'paused' : 'running']);
+    expect(await card.evaluate((el) => getComputedStyle(el).animationName)).toBe(motion === 'reduce' ? 'none' : 'heat');
+
+    // AC2: a drawn flame in the palette, not an emoji or icon-font character (now in the 1st chips).
+    const flame = card.getByTestId('flame').first();
     await expect(flame).toBeVisible();
     expect(await flame.evaluate((svg) => svg.tagName.toLowerCase())).toBe('svg');
     const fills = await flame.locator('path').evaluateAll((paths) => paths.map((p) => getComputedStyle(p).fill));
@@ -196,7 +219,7 @@ const countViewTransitionAnimations = () => {
 };
 
 for (const motion of ['no-preference', 'reduce'] as const) {
-  test(`#18 AC6: reordering ${motion === 'reduce' ? 'is instant with reduced motion' : 'animates otherwise'}`, async ({ page }) => {
+  test(`#18 AC6 + #55 AC5 + AC8: reordering ${motion === 'reduce' ? 'is instant with reduced motion' : 'glides otherwise'}`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: motion });
     await page.addInitScript(countViewTransitionAnimations);
     const host = await hostSession(page, 3);
@@ -212,3 +235,47 @@ for (const motion of ['no-preference', 'reduce'] as const) {
     else expect(counts.some((n) => n > 0)).toBe(true);
   });
 }
+
+test('#55 AC6: a changed rank fades to its new medal and gets a ▲/▼ corner badge for about 1.5 s, without the chip changing width', async ({ page, browser }) => {
+  const host = await hostSession(page, 4);
+  await newPerson(browser, 'Nudger', host.path);
+  await expect(board(page).getByRole('tablist')).toBeVisible({ timeout: 5_000 });
+  const [a, b, c, d] = host.places;
+  for (const [winner, loser] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]) await host.pick(winner.id, loser.id);
+  const hostRank = async (placeId: number) => (await host.data()).people.find((p) => p.name === host.name)!.ranking.findIndex((r) => r.placeId === placeId) + 1;
+  await expect.poll(() => hostRank(d.id)).toBe(4);
+  await expect(board(page).getByText(`${host.name} 4th`, { exact: true })).toBeVisible({ timeout: 5_000 });
+  await page.waitForTimeout(2_000); // any badges from getting here have gone
+  await expect(board(page).getByTestId('rank-badge')).toHaveCount(0);
+
+  // d overtakes c in the host's ranking: 4th → 3rd (better) and c 3rd → 4th (worse).
+  while ((await hostRank(d.id)) > 3) await host.pick(d.id, c.id);
+  const better = board(page).getByTestId('rank-badge').filter({ hasText: '▲' });
+  const worse = board(page).getByTestId('rank-badge').filter({ hasText: '▼' });
+  await expect(better).toBeVisible({ timeout: 5_000 });
+  await expect(worse).toBeVisible();
+  const risen = better.locator('..');
+  await expect(risen).toContainText(`${host.name} 3rd`);
+  await expect(risen).toHaveCSS('background-color', MEDAL_RGB.bronze);
+  const [chipBox, badgeBox] = [(await risen.boundingBox())!, (await better.boundingBox())!];
+  expect(badgeBox.x + badgeBox.width).toBeGreaterThan(chipBox.x + chipBox.width); // on the corner, over the edge
+  expect(badgeBox.y).toBeLessThan(chipBox.y);
+  const withBadge = chipBox.width;
+
+  await expect(board(page).getByTestId('rank-badge')).toHaveCount(0, { timeout: 3_000 });
+  const withoutBadge = (await rowFor(page, d.name).getByText(`${host.name} 3rd`, { exact: true }).boundingBox())!.width;
+  expect(withBadge).toBeCloseTo(withoutBadge, 1);
+});
+
+test('#55 AC7: when the top pick changes, the new name moves onto the gold card and its new 1st chips grow their flame', async ({ page, browser }) => {
+  const host = await hostSession(page, 3);
+  const friend = await newPerson(browser, 'Swapper', host.path);
+  await expect(board(page).getByRole('tablist')).toBeVisible({ timeout: 5_000 });
+  const data = await host.data();
+  const [oldTop, bottom] = [data.combined[0], data.combined.at(-1)!];
+  await page.waitForTimeout(2_000);
+  for (const who of [page, friend.page]) for (const other of data.combined.slice(0, -1)) await host.pick(bottom.placeId, other.placeId, who);
+  await expect(topPick(page).getByRole('heading', { name: bottom.name })).toBeVisible({ timeout: 5_000 });
+  await expect(topPick(page).getByTestId('flame').and(page.locator('.flame-in')).first()).toBeAttached();
+  await expect(topPick(page).getByText(oldTop.name)).toHaveCount(0, { timeout: 2_000 }); // it moved out
+});

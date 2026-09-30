@@ -41,7 +41,7 @@ test('#33 AC3: saving a home from the prompt closes it, and the cards then show 
 
 test('#33 AC4: with a home set, opening a session does not show the sheet', async ({ browser }) => {
   const { page, path } = await homelessInSession(browser);
-  await page.request.put('/api/me/home', { data: { address: 'Somewhere', lat: -37.8, lng: 144.97 } });
+  await page.request.put('/api/me/home', { data: { address: 'Somewhere', lat: -37.8, lng: 144.97, country: 'AU' } });
   await page.goto(path);
   await expect(page.getByRole('article')).toHaveCount(2);
   await expect(page.getByRole('article').first()).toContainText('25 min');

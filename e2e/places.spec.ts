@@ -223,6 +223,7 @@ test("#19 AC7: a place's … menu: sets, note, Maps, remove from this set, and d
   await page.goto(`/places/${hereId}`);
   await openPlaceMenu(page, place.name);
   await expect(sheet(page).getByRole('link', { name: 'Open in Google Maps' })).toHaveAttribute('href', /cid=/);
+  await expect(sheet(page).getByRole('link', { name: 'Open in Google Maps' }).locator('svg.lucide-map')).toHaveCount(1); // #52 AC4
   await sheet(page).getByRole('button', { name: 'Sets' }).click();
   await sheet(page).getByRole('checkbox', { name: elsewhere }).click();
   await expect.poll(async () => (await apiPlace(page, place.name))!.setIds.sort()).toEqual([hereId, elsewhereId].sort());

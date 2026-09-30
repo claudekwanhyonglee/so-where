@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { PRETEND_ST_SUGGESTION, saveHomeFromSuggestion, signUp, stubMapTiles, uniqueName } from './helpers.ts';
+import { pickCountry, PRETEND_ST_SUGGESTION, saveHomeFromSuggestion, signUp, stubMapTiles, uniqueName } from './helpers.ts';
 
 const homeSheet = (page: Page) => page.getByRole('dialog', { name: 'Home address' });
 const homeRow = (page: Page) => page.getByRole('button', { name: /^Home address/ });
@@ -14,6 +14,7 @@ async function openHomeSheet(page: Page) {
 test('#32 AC2: typing suggests addresses; choosing one shows a map preview with a marker and OSM attribution', async ({ page }) => {
   const tiles = await stubMapTiles(page);
   const sheet = await openHomeSheet(page);
+  await pickCountry(sheet);
 
   await sheet.getByLabel('Address').fill('1 Pretend');
   const suggestions = sheet.getByRole('list', { name: 'Suggestions' });
@@ -40,7 +41,7 @@ test('#32 AC3: saving a chosen suggestion stores it as the home', async ({ page 
   await saveHomeFromSuggestion(page);
   await expect(homeRow(page)).toContainText(PRETEND_ST_SUGGESTION);
   const me = await (await page.request.get('/api/me')).json();
-  expect(me.home).toEqual({ address: PRETEND_ST_SUGGESTION, lat: -37.7991, lng: 144.9671 });
+  expect(me.home).toEqual({ address: PRETEND_ST_SUGGESTION, lat: -37.7991, lng: 144.9671, country: 'AU' });
 });
 
 test("#32 AC4: when suggestions can't be fetched, the sheet says so and the saved home is unchanged", async ({ page }) => {

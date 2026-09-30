@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { addPlaceViaApi, emptyGroup, homeStep, INVITE, newPerson, signUpToHomeStep, skipHomePrompt, uniqueName } from './helpers.ts';
+import { addPlaceViaApi, emptyGroup, homeStep, INVITE, newPerson, placeLink, signUpToHomeStep, skipHomePrompt, uniqueName } from './helpers.ts';
 
 const guide = (page: Page) => page.getByRole('region', { name: 'Getting started' });
 const routePanel = (page: Page) => guide(page).getByRole('region', { name: 'Your route to dinner' });
@@ -116,3 +116,22 @@ test('#39 AC4: with no session going, Start picking is as in the new-group guide
   await expect(page).toHaveURL(/\/s\/[\w-]+$/);
   await expect(page.getByRole('heading', { name: 'All places' })).toBeVisible();
 });
+
+for (const pickers of [0, 1] as const) {
+  test(`#51 AC1 + AC2: ${pickers ? 'with' : 'without'} a live session, "Or add more places" opens the add-place sheet, and adding one stays on Start picking with the count updated`, async ({ page, browser }) => {
+    await groupWithPlaces(browser, pickers);
+    await newcomer(page);
+    const pick = step(page, 'Start picking');
+    await expect(pick).toContainText('2 places so far');
+
+    await pick.getByRole('button', { name: 'Or add more places' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Add a place' });
+    await sheet.getByLabel('Name or Google Maps link').fill(placeLink(uniqueName('Invented Noodles ')));
+    await sheet.getByRole('button', { name: 'Add place' }).click();
+    await expect(sheet).toBeHidden();
+
+    await expect(step(page, 'Start picking')).toBeVisible();
+    await expect(pick).toContainText('3 places so far');
+    await expect(page).toHaveURL(/\/$/);
+  });
+}

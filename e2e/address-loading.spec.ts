@@ -1,5 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { signUp, uniqueName } from './helpers.ts';
+import { pickCountry, signUp, uniqueName } from './helpers.ts';
 
 const homeSheet = (page: Page) => page.getByRole('dialog', { name: 'Home address' });
 const suggestionsList = (page: Page) => homeSheet(page).getByRole('list', { name: 'Suggestions' });
@@ -27,7 +27,7 @@ async function openHomeSheet(page: Page) {
   await signUp(page, uniqueName('Waiter'));
   await page.goto('/you');
   await page.getByRole('button', { name: /^Home address/ }).click();
-  await expect(homeSheet(page)).toBeVisible();
+  await pickCountry(homeSheet(page));
 }
 
 test('#36 AC1: typing shows a single "Searching…" row with a spinner straight away, before the lookup starts', async ({ page }) => {

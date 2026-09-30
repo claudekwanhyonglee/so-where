@@ -76,6 +76,36 @@ describe("#43 AC2: biased toward the group's places", () => {
   });
 });
 
+describe("#47: with no group places, search leans towards the searcher's home", () => {
+  const HOME = { address: '1 Pretend St, Carlton', lat: -33.87, lng: 151.21, country: 'AU' };
+  const biasOf = (url: URL) => [url.searchParams.get('lat'), url.searchParams.get('lon')];
+
+  it('#47 AC1: no located places and a home: biased to the home', async () => {
+    const calls: { url: URL }[] = [];
+    const { alex } = await setup(fakePhoton([DUMPLING_HOUSE], { calls }));
+    await alex.put('/api/me/home', HOME);
+    await alex.get('/api/places/search?q=Pretend');
+    expect(biasOf(calls[0].url)).toEqual(['-33.87', '151.21']);
+  });
+
+  it("#47 AC2: located places win over the searcher's home", async () => {
+    const calls: { url: URL }[] = [];
+    const { alex } = await setup(fakePhoton([DUMPLING_HOUSE], { calls }));
+    await alex.put('/api/me/home', HOME);
+    await alex.post('/api/places', { url: placeLink('a1', 'Invented One', -37.8, 144.96) });
+    await alex.get('/api/places/search?q=Pretend');
+    expect(biasOf(calls[0].url)).toEqual(['-37.8', '144.96']);
+  });
+
+  it('#47 AC3: no located places and no home: no bias', async () => {
+    const calls: { url: URL }[] = [];
+    const { alex } = await setup(fakePhoton([DUMPLING_HOUSE], { calls }));
+    await alex.post('/api/me/skip-home');
+    await alex.get('/api/places/search?q=Pretend');
+    expect(biasOf(calls[0].url)).toEqual([null, null]);
+  });
+});
+
 const CHOSEN = { key: 'osm:N1001', name: 'Pretend Dumpling House', lat: -37.8001, lng: 144.9671 };
 
 describe('#43 AC3: adding a chosen search result', () => {

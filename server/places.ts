@@ -68,12 +68,14 @@ export function placesRoutes({ db, fetch, now }: Deps, nominatim: Nominatim) {
     return c.json(places.map((p) => ({ ...p, setIds: setIds.get(p.id) ?? [] })));
   });
 
-  /** Food and drink places matching `q`, favouring the area the group's places are in. */
+  /** Food and drink places matching `q`, favouring the area the group's places are in, or else the searcher's home. */
   api.get('/search', async (c) => {
     const q = c.req.query('q')?.trim();
     if (!q) return c.json([]);
+    const { home_lat, home_lng } = c.var.person;
+    const home = home_lat === null || home_lng === null ? undefined : { lat: home_lat, lng: home_lng };
     try {
-      return c.json(await searchPlaces(fetch, q, groupCentre(db)));
+      return c.json(await searchPlaces(fetch, q, groupCentre(db) ?? home));
     } catch {
       return c.json({ error: 'Place search is unavailable right now.' }, 502);
     }

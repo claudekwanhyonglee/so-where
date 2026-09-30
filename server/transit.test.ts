@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fakeFetch, fakeNominatim, fakeTransitous, signedInDevice, testApp } from './test-helpers.ts';
 
-const HOME = { address: '1 Pretend St, Carlton', lat: -37.79, lng: 144.97 };
-const NEW_HOME = { address: '5 Madeup Rd, Windsor', lat: -37.85, lng: 144.99 };
+const HOME = { address: '1 Pretend St, Carlton', lat: -37.79, lng: 144.97, country: 'AU' };
+const NEW_HOME = { address: '5 Madeup Rd, Windsor', lat: -37.85, lng: 144.99, country: 'AU' };
 const placeLink = (hex: string, name: string, lat: number, lng: number) =>
   `https://www.google.com/maps/place/${name.replaceAll(' ', '+')}/@${lat},${lng},17z/data=!4m6!3m5!1s0x1:0x${hex}!8m2!3d${lat}!4d${lng}`;
 

@@ -45,7 +45,8 @@ export type PhotonPlace = { lat: number; lng: number; properties: Record<string,
 
 /**
  * Fake Photon: answers with every place whose properties contain the query (ignoring `limit`, so callers must cap)
- * and, if `osm_tag` filters are given, whose `osm_key:osm_value` is one of them, as GeoJSON features, or with `status` if set.
+ * and, if `osm_tag` filters are given, whose `osm_key:osm_value` is one of them, and, if `countrycode` is given, in that
+ * country, as GeoJSON features, or with `status` if set.
  */
 export function fakePhoton(places: PhotonPlace[], opts: { status?: number; calls?: { url: URL; init?: RequestInit }[] } = {}): Route {
   return (url, init) => {
@@ -54,8 +55,12 @@ export function fakePhoton(places: PhotonPlace[], opts: { status?: number; calls
     if (opts.status) return new Response('unavailable', { status: opts.status });
     const q = (url.searchParams.get('q') ?? '').toLowerCase();
     const tags = url.searchParams.getAll('osm_tag');
+    const country = url.searchParams.get('countrycode')?.toUpperCase();
     const hits = places.filter(
-      (p) => Object.values(p.properties).join(' ').toLowerCase().includes(q) && (!tags.length || tags.includes(`${p.properties.osm_key}:${p.properties.osm_value}`)),
+      (p) =>
+        Object.values(p.properties).join(' ').toLowerCase().includes(q) &&
+        (!tags.length || tags.includes(`${p.properties.osm_key}:${p.properties.osm_value}`)) &&
+        (!country || p.properties.countrycode?.toUpperCase() === country),
     );
     return json({
       type: 'FeatureCollection',

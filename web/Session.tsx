@@ -1,12 +1,14 @@
-import { Ban, ChevronLeft, Copy, ExternalLink, Share2, TramFront } from 'lucide-react';
-import { startTransition, useCallback, useEffect, useRef, useState, ViewTransition } from 'react';
+import { Ban, ChevronLeft, Copy, Map as MapIcon, Share2, TramFront } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { toast } from 'sonner';
 import { api, ApiError, errorMessage } from './api.ts';
 import { Leaderboard, type Board } from './Leaderboard.tsx';
+import { RuledOut, vetoesIn, type RuledOutPlace } from './RuledOut.tsx';
 import type { Me } from './App.tsx';
 import { HomeSheet } from './HomeSheet.tsx';
 import { googleMapsUrl, plural, swatch, transitDirectionsUrl, transitPill, type TransitAnswer } from './model.ts';
 import { Link } from './router.tsx';
+import { joinedNews, vetoNews } from './session-news.ts';
 import { Avatar, Button, Card, DESKTOP_QUERY, Eyebrow, Notice, Sheet, inputBox } from './ui.tsx';
 import { usePolling } from './usePolling.ts';
 
@@ -35,11 +37,9 @@ export function SessionPage({ id, me, onHomeSaved, askForHome }: { id: string; m
     [],
   );
   if (deleted) return <SessionDeleted />;
-  // Cards look their transit time up again when home changes.
-  const homeKey = me.home ? `${me.home.lat},${me.home.lng}` : '';
   return (
     <>
-      <LiveSession id={id} meId={me.id} homeKey={homeKey} call={call} />
+      <LiveSession id={id} meId={me.id} home={me.home} call={call} />
       {askingForHome && <HomeSheet me={me} onSaved={onHomeSaved} close={() => setAskingForHome(false)} offerNotNow />}
     </>
   );
@@ -57,11 +57,12 @@ function SessionDeleted() {
   );
 }
 
-function LiveSession({ id, meId, homeKey, call }: { id: string; meId: number; homeKey: string; call: SessionApi }) {
+function LiveSession({ id, meId, home, call }: { id: string; meId: number; home: Me['home']; call: SessionApi }) {
   const info = usePolling(useCallback(() => call<SessionInfo>(`/sessions/${id}`), [id, call]), INFO_POLL_MS);
   // `version` changes whenever this device picks, so the board refreshes straight away too.
   const [version, setVersion] = useState(0);
   const board = usePolling(useCallback(() => call<Board>(`/sessions/${id}/leaderboard?v=${version}`), [id, version, call]), BOARD_POLL_MS);
+  useSessionNews(info, board, meId);
   const [view, setView] = useState<'pick' | 'board'>('pick');
   const [sharing, setSharing] = useState(false);
   if (!info) return null;
@@ -77,7 +78,7 @@ function LiveSession({ id, meId, homeKey, call }: { id: string; meId: number; ho
     }
     setSharing(true);
   };
-  const shownOnPhone = (v: typeof view) => `min-w-0 ${view === v ? '' : 'hidden desk:block'}`;
+  const shownOnPhone = (v: typeof view) => `min-h-0 min-w-0 ${view === v ? '' : 'hidden desk:block'}`;
 
   return (
     <>
@@ -95,17 +96,35 @@ function LiveSession({ id, meId, homeKey, call }: { id: string; meId: number; ho
         ))}
       </div>
       {info.members.length === 1 && <SoloBanner onShare={share} />}
-      <div className="grid gap-5 desk:grid-cols-[minmax(0,1fr)_340px] desk:items-start">
+      {/* The screen never scrolls: each column scrolls inside itself. */}
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-5 desk:grid-cols-[minmax(0,1fr)_340px]">
         <div className={shownOnPhone('pick')}>
-          <Picker sessionId={id} homeKey={homeKey} call={call} onChanged={() => setVersion((v) => v + 1)} />
+          <Picker sessionId={id} home={home} meId={meId} board={board} call={call} onChanged={() => setVersion((v) => v + 1)} />
         </div>
-        <div className={`desk:sticky desk:top-4 ${shownOnPhone('board')}`}>
+        {/* Padded so the top card's stamp and rings aren't clipped by the scrolling. */}
+        <div className={`relative -mx-2 overflow-y-auto px-2 ${shownOnPhone('board')}`}>
           <Leaderboard board={board} />
         </div>
       </div>
       {sharing && <ShareSheet link={link} members={info.members} board={board} meId={meId} onClose={() => setSharing(false)} />}
     </>
   );
+}
+
+/** Toasts for who joins, and what others rule out or bring back, while you're here (not for what was so before). */
+function useSessionNews(info: SessionInfo | null, board: Board | null, meId: number) {
+  const members = useRef<Member[] | null>(null);
+  const rows = useRef<Board['combined'] | null>(null);
+  useEffect(() => {
+    if (!info) return;
+    joinedNews(members.current, info.members, meId).forEach((news) => toast(news));
+    members.current = info.members;
+  }, [info, meId]);
+  useEffect(() => {
+    if (!board) return;
+    vetoNews(rows.current, board.combined, board.people, meId).forEach((news) => toast(news));
+    rows.current = board.combined;
+  }, [board, meId]);
 }
 
 function SessionHeader({ info, onShare }: { info: SessionInfo; onShare: () => void }) {
@@ -192,13 +211,36 @@ function ShareSheet({ link, members, board, meId, onClose }: { link: string; mem
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const PICK_FEEDBACK_MS = 280;
+const PICK_FEEDBACK_MS = 700; // long enough for the stamp and confetti to land
 const TIE_FEEDBACK_MS = 120;
+
+type Outcome = { kind: 'pick'; placeId: number } | { kind: 'tie' } | { kind: 'veto'; placeId: number };
+type CardState = 'idle' | 'chosen' | 'lost' | 'vetoed';
 const MILESTONES: Record<number, string> = { 10: '10 picks! Your top 3 is taking shape.', 25: '25 picks. You really care about dinner.' };
 
-function Picker({ sessionId, homeKey, call, onChanged }: { sessionId: string; homeKey: string; call: SessionApi; onChanged: () => void }) {
+/**
+ * Everyone's vetoes from the board, less your own that you've just brought back (until the board catches up).
+ * `hide` a place you brought back; `unhide` one you rule out again.
+ */
+function useRuledOut(board: Board | null, meId: number) {
+  const [hidden, setHidden] = useState<ReadonlySet<number>>(new Set());
+  useEffect(() => {
+    // Forget what the board no longer has, so ruling it out again shows it.
+    const stillOut = new Set(vetoesIn(board).filter((v) => v.by.id === meId).map((v) => v.placeId));
+    setHidden((was) => ([...was].every((id) => stillOut.has(id)) ? was : new Set([...was].filter((id) => stillOut.has(id)))));
+  }, [board, meId]);
+  return {
+    vetoes: vetoesIn(board).filter((v) => !(v.by.id === meId && hidden.has(v.placeId))),
+    hide: (placeId: number) => setHidden((was) => new Set([...was, placeId])),
+    unhide: (placeId: number) => setHidden((was) => new Set([...was].filter((id) => id !== placeId))),
+  };
+}
+
+const CHIP_LEAVE_MS = 380;
+
+function Picker({ sessionId, home, meId, board, call, onChanged }: { sessionId: string; home: Me['home']; meId: number; board: Board | null; call: SessionApi; onChanged: () => void }) {
   const [state, setState] = useState<PairResponse | null>(null);
-  const [chosen, setChosen] = useState<number | 'tie' | null>(null);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [error, setError] = useState('');
   const busy = useRef(false);
   const base = `/sessions/${sessionId}`;
@@ -207,12 +249,10 @@ function Picker({ sessionId, homeKey, call, onChanged }: { sessionId: string; ho
     call<PairResponse>(`${base}/pair`).then(setState, (err) => setError(errorMessage(err)));
   }, [base, call]);
 
-  /** Swaps in the next pair as a view transition: the old pair fades, the new one slides in. */
+  /** Swaps in the next pair, which is dealt in. */
   const show = (next: PairResponse) => {
-    startTransition(() => {
-      setState(next);
-      setChosen(null);
-    });
+    setState(next);
+    setOutcome(null);
     onChanged();
   };
 
@@ -227,7 +267,7 @@ function Picker({ sessionId, homeKey, call, onChanged }: { sessionId: string; ho
       return next;
     } catch (err) {
       setError(errorMessage(err));
-      setChosen(null);
+      setOutcome(null);
       return null;
     } finally {
       busy.current = false;
@@ -236,24 +276,48 @@ function Picker({ sessionId, homeKey, call, onChanged }: { sessionId: string; ho
 
   const pair = state?.pair;
   const choose = async (winner: number | null) => {
-    if (!pair) return;
-    setChosen(winner ?? 'tie');
+    if (!pair || busy.current) return;
+    setOutcome(winner === null ? { kind: 'tie' } : { kind: 'pick', placeId: winner });
     const next = await answer(() => call<PairResponse>(`${base}/picks`, { body: { a: pair[0].id, b: pair[1].id, winner } }), winner === null ? TIE_FEEDBACK_MS : PICK_FEEDBACK_MS);
     if (next && MILESTONES[next.picks]) toast(MILESTONES[next.picks]);
   };
+  const ruledOut = useRuledOut(board, meId);
   const undoVeto = (place: CardPlace) => call<PairResponse>(`${base}/vetoes/${place.id}`, { method: 'DELETE' }).then(show, (err) => setError(errorMessage(err)));
+  const ruleOutAgain = (place: RuledOutPlace) => {
+    ruledOut.unhide(place.placeId);
+    return call<PairResponse>(`${base}/vetoes`, { body: { placeId: place.placeId } }).then(show, (err) => setError(errorMessage(err)));
+  };
+  /** From the "Absolutely not" section: back into your picking, once its chip has had time to leave. */
+  const bringBack = async (place: RuledOutPlace) => {
+    try {
+      const [next] = await Promise.all([call<PairResponse>(`${base}/vetoes/${place.placeId}`, { method: 'DELETE' }), wait(CHIP_LEAVE_MS)]);
+      ruledOut.hide(place.placeId);
+      show(next);
+      toast(`${place.name} is back in`, { action: { label: 'Undo', onClick: () => void ruleOutAgain(place) } });
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
   const veto = async (place: CardPlace) => {
-    const next = await answer(() => call<PairResponse>(`${base}/vetoes`, { body: { placeId: place.id } }));
+    if (busy.current) return;
+    ruledOut.unhide(place.id);
+    setOutcome({ kind: 'veto', placeId: place.id });
+    const next = await answer(() => call<PairResponse>(`${base}/vetoes`, { body: { placeId: place.id } }), PICK_FEEDBACK_MS);
     if (next) toast(`${place.name} is out for tonight`, { action: { label: 'Undo', onClick: () => void undoVeto(place) } });
   };
 
   useDesktopPickKeys(pair ? { left: () => choose(pair[0].id), right: () => choose(pair[1].id), tie: () => choose(null) } : null);
 
   if (!state) return null;
-  const cardState = (id: number) => (chosen === null ? 'idle' : chosen === id ? 'chosen' : 'lost');
+  const cardState = (id: number): CardState => {
+    if (!outcome) return 'idle';
+    if (outcome.kind === 'tie') return 'lost';
+    if (outcome.kind === 'veto') return outcome.placeId === id ? 'vetoed' : 'idle';
+    return outcome.placeId === id ? 'chosen' : 'lost';
+  };
 
   return (
-    <section aria-label="Pick" className="flex flex-col gap-3.5">
+    <section aria-label="Pick" className="flex h-full min-h-0 flex-col gap-3.5 max-desk:has-[.squeezed]:gap-2.5 [&>*]:flex-none">
       <div className="flex items-center justify-between text-[13px]">
         <span className="text-muted">
           <span className="desk:hidden">Tap</span>
@@ -264,22 +328,23 @@ function Picker({ sessionId, homeKey, call, onChanged }: { sessionId: string; ho
       {error && <Notice tone="error">{error}</Notice>}
       {pair ? (
         <>
-          <ViewTransition key={`${pair[0].id}-${pair[1].id}-${state.picks}`} enter="pair-enter" exit="pair-exit">
-            <div className="flex flex-col desk:flex-row">
-              <PlaceCard sessionId={sessionId} homeKey={homeKey} place={pair[0]} position="first" state={cardState(pair[0].id)} onPick={() => choose(pair[0].id)} onVeto={() => veto(pair[0])} />
-              <span aria-hidden="true" className="pointer-events-none relative z-[2] -my-[17px] grid size-11 place-items-center self-center rounded-full bg-ink text-[13px] font-extrabold tracking-[.04em] text-mustard ring-[5px] ring-peach desk:-mx-[17px] desk:my-0">
-                OR
-              </span>
-              <PlaceCard sessionId={sessionId} homeKey={homeKey} place={pair[1]} position="second" state={cardState(pair[1].id)} onPick={() => choose(pair[1].id)} onVeto={() => veto(pair[1])} />
-            </div>
-          </ViewTransition>
-          <div className="flex items-center justify-center gap-4">
-            <KeyHint keys={['←', '→']}>pick</KeyHint>
-            <Button variant="secondary" onClick={() => choose(null)}>
-              Too close to call
-            </Button>
-            <KeyHint keys={['↓']}>tie</KeyHint>
+          <div
+            key={`${pair[0].id}-${pair[1].id}-${state.picks}`}
+            className={`pick-pair flex flex-col desk:flex-row ${outcome ? 'busy' : ''} ${ruledOut.vetoes.length ? 'squeezed' : ''}`}
+          >
+            <PlaceCard sessionId={sessionId} home={home} place={pair[0]} position="first" state={cardState(pair[0].id)} onPick={() => choose(pair[0].id)} onVeto={() => veto(pair[0])} />
+            <span
+              data-testid="or"
+              aria-hidden="true"
+              className="pick-or pointer-events-none relative z-[2] -my-[17px] grid size-11 place-items-center self-center rounded-full bg-ink text-[13px] font-extrabold tracking-[.04em] text-mustard ring-[5px] ring-peach desk:-mx-[17px] desk:my-0"
+            >
+              OR
+            </span>
+            <PlaceCard sessionId={sessionId} home={home} place={pair[1]} position="second" state={cardState(pair[1].id)} onPick={() => choose(pair[1].id)} onVeto={() => veto(pair[1])} />
           </div>
+          <Button variant="secondary" onClick={() => choose(null)} className="self-center">
+            Too close to call
+          </Button>
         </>
       ) : (
         <Card className="flex flex-col items-center gap-2.5 py-8 text-center">
@@ -287,9 +352,10 @@ function Picker({ sessionId, homeKey, call, onChanged }: { sessionId: string; ho
             ?
           </span>
           <b>Not enough places left to compare</b>
-          <span className="text-muted">Add places to this set, or undo an "Absolutely not".</span>
+          <span className="text-muted">Add places to this set, or bring one back from "Absolutely not" below.</span>
         </Card>
       )}
+      <RuledOut vetoes={ruledOut.vetoes} meId={meId} onBringBack={bringBack} />
     </section>
   );
 }
@@ -314,17 +380,6 @@ function useDesktopPickKeys(actions: { left: () => void; right: () => void; tie:
   }, []);
 }
 
-const KeyHint = ({ keys, children }: { keys: string[]; children: string }) => (
-  <span className="hidden items-center gap-[5px] text-xs text-muted desk:inline-flex">
-    {keys.map((k) => (
-      <kbd key={k} className="rounded-[5px] bg-white px-1.5 py-[3px] text-[11px]/none font-bold shadow-[0_0_0_1px_var(--color-edge),0_1px_0_1px_var(--color-edge)]">
-        {k}
-      </kbd>
-    ))}
-    {children}
-  </span>
-);
-
 function useTransitTime(sessionId: string, placeId: number, homeKey: string) {
   const [answer, setAnswer] = useState<TransitAnswer | null>(null);
   useEffect(() => {
@@ -341,15 +396,29 @@ function useTransitTime(sessionId: string, placeId: number, homeKey: string) {
   return answer;
 }
 
-const cardMotion = {
-  idle: 'hover:-translate-y-0.5',
-  chosen: 'scale-[1.03] shadow-[0_0_0_4px_var(--color-peach),0_0_0_7px_var(--card),0_22px_36px_-16px_rgba(0,0,0,.35)]',
-  lost: 'scale-[.97] opacity-35',
-};
+const CONFETTI_COLOURS = ['var(--color-tomato)', 'var(--color-mustard)', 'var(--color-leaf)', '#2f5d9e', '#ff8a5b', 'var(--color-peach)'];
+
+/** 20 pieces flung out from the middle of a picked card. */
+function Confetti() {
+  const [pieces] = useState(() =>
+    Array.from({ length: 20 }, (_, i) => {
+      const angle = (i / 20) * Math.PI * 2;
+      const distance = 100 + Math.random() * 70;
+      return { '--c': CONFETTI_COLOURS[i % CONFETTI_COLOURS.length], '--x': `${Math.cos(angle) * distance}px`, '--y': `${Math.sin(angle) * distance}px`, '--r': `${Math.random() * 540}deg` };
+    }),
+  );
+  return (
+    <span data-testid="confetti" aria-hidden="true" className="confetti">
+      {pieces.map((style, i) => (
+        <i key={i} style={style as CSSProperties} />
+      ))}
+    </span>
+  );
+}
 
 function PlaceCard({
   sessionId,
-  homeKey,
+  home,
   place,
   position,
   state,
@@ -357,15 +426,16 @@ function PlaceCard({
   onVeto,
 }: {
   sessionId: string;
-  homeKey: string;
+  home: Me['home'];
   place: CardPlace;
   position: 'first' | 'second';
-  state: keyof typeof cardMotion;
+  state: CardState;
   onPick: () => void;
   onVeto: () => void;
 }) {
-  const transit = useTransitTime(sessionId, place.id, homeKey);
+  const transit = useTransitTime(sessionId, place.id, home ? `${home.lat},${home.lng}` : ''); // looked up again when home changes
   const shown = transitPill(transit);
+  const directions = transitDirectionsUrl(place, home?.address);
   const { bg, fg } = swatch(place.id);
   const pill = fg === '#2a1712' ? 'bg-ink/10 hover:bg-ink/20' : 'bg-white/20 hover:bg-white/30';
   // On phones the OR badge sits on the seam, so the cards make room for it.
@@ -374,29 +444,36 @@ function PlaceCard({
   return (
     <article
       style={{ background: bg, color: fg, ['--card' as string]: bg }}
-      className={`relative flex min-h-[170px] flex-1 flex-col rounded-[28px] p-[18px] transition-[transform,opacity,box-shadow] duration-200 desk:min-h-[280px] desk:rounded-[34px] desk:p-7 ${seam} ${cardMotion[state]}`}
+      className={`pick-card relative flex min-h-[170px] flex-1 flex-col rounded-[28px] p-[18px] desk:min-h-[280px] desk:rounded-[34px] desk:p-7 ${seam} ${state}`}
     >
+      {state === 'chosen' && (
+        <>
+          <span className="pick-stamp">Yes please</span>
+          <Confetti />
+        </>
+      )}
+      {state === 'vetoed' && <span className="pick-stamp nope">Absolutely not</span>}
       <button aria-label={`Pick ${place.name}`} onClick={onPick} className="absolute inset-0 rounded-[inherit]" />
       <button aria-label="Absolutely not" title="Absolutely not" onClick={onVeto} className={`absolute top-3.5 right-3.5 z-10 grid size-9 place-items-center rounded-full ${pill}`}>
         <Ban size={18} aria-hidden="true" />
       </button>
-      <div className="pointer-events-none relative flex flex-1 flex-col gap-[5px]">
+      <div className="pick-body pointer-events-none relative flex flex-1 flex-col gap-[5px]">
         <h3 className="pr-10 font-display text-[25px]/[1.08] desk:text-[40px]/[1.08]">{place.name}</h3>
         <span className="opacity-80">{place.suburb ?? 'Suburb unknown'}</span>
-        {place.note && <span className="text-sm italic opacity-90">“{place.note}”</span>}
-        <div className="mt-auto flex flex-wrap gap-1.5 pt-2 [&>*]:inline-flex [&>*]:items-center [&>*]:gap-[5px] [&>*]:rounded-full [&>*]:px-[11px] [&>*]:py-[5px] [&>*]:text-[13px] [&>*]:font-bold [&>a]:pointer-events-auto">
+        {place.note && <span className="pick-note text-sm italic opacity-90">“{place.note}”</span>}
+        <div className="pick-pills mt-auto flex flex-wrap gap-1.5 pt-2 [&>*]:inline-flex [&>*]:items-center [&>*]:gap-[5px] [&>*]:rounded-full [&>*]:px-[11px] [&>*]:py-[5px] [&>*]:text-[13px] [&>*]:font-bold [&>a]:pointer-events-auto">
           {shown === 'time' && (
-            <span className={pill} title="By public transport from home, leaving now">
+            <a href={directions} target="_blank" rel="noreferrer" className={pill} title="By public transport from home, leaving now. Opens directions in Google Maps.">
               <TramFront size={16} aria-hidden="true" /> {transit?.minutes} min
-            </span>
+            </a>
           )}
           {shown === 'directions' && (
-            <a href={transitDirectionsUrl(place)} target="_blank" rel="noreferrer" className={pill}>
+            <a href={directions} target="_blank" rel="noreferrer" className={pill}>
               <TramFront size={16} aria-hidden="true" /> Directions
             </a>
           )}
           <a href={googleMapsUrl(place)} target="_blank" rel="noreferrer" aria-label="Open in Google Maps" className={pill}>
-            <ExternalLink size={16} aria-hidden="true" /> Maps
+            <MapIcon size={16} aria-hidden="true" /> Maps
           </a>
         </div>
       </div>

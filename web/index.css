@@ -25,6 +25,11 @@
   --color-soft: #f6e6dc;
   --color-skip: #b07800;
   --color-track: #e2cfc4;
+  /* Medals on the together board: gold is --color-mustard. */
+  --color-silver: #e4e4e8;
+  --color-bronze: #f6d2b4;
+  --color-grey: #f1ebe7;
+  --color-grey-ink: #8a7a73;
 
   --animate-bob: bob 1.6s ease-in-out infinite;
   @keyframes bob {
@@ -39,7 +44,7 @@
   background: repeating-linear-gradient(var(--dash-direction, 90deg), var(--dash-color, var(--color-track)) 0 6px, transparent 6px 10px);
 }
 
-/* View transitions: leaderboard rows glide to their new places; a new pair of cards slides in as the old one fades. */
+/* View transitions: leaderboard rows glide to their new places. */
 ::view-transition-group(*) {
   animation-duration: 0.35s;
 }
@@ -47,20 +52,168 @@
 ::view-transition {
   pointer-events: none;
 }
-::view-transition-new(.pair-enter):only-child {
-  animation: pair-enter 0.32s cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+/* The picking cards run their own motion: a board update mid-deal shows them live, not a frozen copy fading out. */
+.pick-pair {
+  view-transition-name: pick-pair;
 }
-::view-transition-old(.pair-exit):only-child {
-  animation: pair-exit 0.15s ease both;
+::view-transition-old(pick-pair) {
+  display: none;
 }
-@keyframes pair-enter {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.97);
+::view-transition-new(pick-pair) {
+  animation: none;
+}
+
+/* Picking cards. Hover tips a card in towards the middle and lifts it, and OR leans towards it. */
+.pick-card {
+  transform-origin: 50% 100%;
+  transition:
+    transform 0.22s ease,
+    opacity 0.22s ease,
+    box-shadow 0.22s ease;
+}
+.pick-or {
+  transition:
+    transform 0.25s cubic-bezier(0.3, 1.4, 0.5, 1),
+    opacity 0.15s;
+}
+@media (hover: hover) {
+  .pick-pair:not(.busy) > .pick-card:hover {
+    transform: rotate(-1.8deg) translateY(-4px);
+    box-shadow: 0 18px 30px -18px rgba(42, 23, 18, 0.5);
+  }
+  .pick-pair:not(.busy) > .pick-card:last-child:hover {
+    transform: rotate(1.8deg) translateY(-4px);
+  }
+  .pick-pair:not(.busy):has(> .pick-card:first-child:hover) > .pick-or {
+    transform: translateY(-6px) rotate(-12deg);
+    @variant desk {
+      transform: translateX(-8px) rotate(-12deg);
+    }
+  }
+  .pick-pair:not(.busy):has(> .pick-card:last-child:hover) > .pick-or {
+    transform: translateY(6px) rotate(12deg);
+    @variant desk {
+      transform: translateX(8px) rotate(12deg);
+    }
   }
 }
-@keyframes pair-exit {
+
+/* A new pair is dealt in: each card from its own side with a tilt, the second a beat later, then OR spins in. */
+.pick-pair > .pick-card:first-child {
+  animation: deal-left 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards;
+}
+.pick-pair > .pick-card:last-child {
+  animation: deal-right 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.15) 90ms backwards;
+}
+.pick-pair > .pick-or {
+  animation: or-spin 0.3s cubic-bezier(0.3, 1.6, 0.5, 1) 200ms backwards;
+}
+@keyframes deal-left {
+  from {
+    opacity: 0;
+    transform: translate(-60px, 30px) rotate(-8deg) scale(0.9);
+  }
+}
+@keyframes deal-right {
+  from {
+    opacity: 0;
+    transform: translate(60px, 30px) rotate(8deg) scale(0.9);
+  }
+}
+@keyframes or-spin {
+  from {
+    opacity: 0;
+    transform: scale(0) rotate(-90deg);
+  }
+}
+@keyframes pair-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A pick squashes the card and springs it back under a "Yes please" stamp and confetti; the other card drops back and
+   OR shrinks away. "Absolutely not" stamps the card in red, then it drops away. */
+.pick-pair > .pick-card.chosen {
+  z-index: 2;
+  animation: pick-pop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1) forwards;
+}
+.pick-pair > .pick-card.lost {
+  transform: translateY(18px) scale(0.94);
+  opacity: 0.2;
+}
+.pick-pair > .pick-card.vetoed {
+  animation: pick-drop 0.3s ease-in 0.42s forwards;
+}
+.pick-pair.busy > .pick-or {
+  opacity: 0;
+  transform: scale(0.4);
+}
+@keyframes pick-pop {
+  from {
+    transform: scale(0.94, 0.92);
+  }
+  60% {
+    transform: scale(1.06, 1.05);
+  }
   to {
+    transform: scale(1.03);
+  }
+}
+@keyframes pick-drop {
+  to {
+    transform: translateY(40px) rotate(4deg) scale(0.92);
+    opacity: 0;
+  }
+}
+.pick-stamp {
+  position: absolute;
+  z-index: 3;
+  top: 44%;
+  left: 50%;
+  padding: 4px 14px 6px;
+  border: 4px solid currentColor;
+  border-radius: 10px;
+  font-size: clamp(22px, 3.4vw, 30px);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+  transform: translate(-50%, -50%) rotate(-10deg) scale(2.2);
+  opacity: 0;
+  pointer-events: none;
+  animation: stamp-slam 0.3s cubic-bezier(0.2, 1.4, 0.5, 1) 0.08s forwards;
+}
+.pick-stamp.nope {
+  color: var(--color-stamp);
+  background: color-mix(in srgb, var(--color-peach) 92%, transparent);
+}
+@keyframes stamp-slam {
+  to {
+    transform: translate(-50%, -50%) rotate(-10deg) scale(1);
+    opacity: 1;
+  }
+}
+.confetti {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.confetti i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--c);
+  animation: confetti-fly 0.65s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
+}
+@keyframes confetti-fly {
+  to {
+    transform: translate(var(--x), var(--y)) rotate(var(--r));
     opacity: 0;
   }
 }
@@ -82,6 +235,206 @@
   }
   66% {
     transform: scale(1.04, 0.95) skewX(3deg);
+  }
+}
+
+/* "Absolutely not" under the picking cards: folds open (0fr → 1fr) when the first place is ruled out and takes the
+   room left below, its chips scrolling inside with a fade at the bottom. Hidden entirely when folded. */
+.nope-wrap {
+  display: grid;
+  flex: 0 1 auto;
+  min-height: 0;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition:
+    grid-template-rows 0.4s cubic-bezier(0.3, 0.9, 0.3, 1),
+    visibility 0s 0.4s;
+}
+.nope-wrap[data-open] {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition: grid-template-rows 0.4s cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+.nope-wrap:not([data-open]) .nope-chip {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.nope-items {
+  mask-image: linear-gradient(#000 calc(100% - 24px), transparent);
+}
+.nope-stamp {
+  border: 3px solid currentColor;
+  border-radius: 8px;
+  padding: 3px 11px 4px;
+  color: var(--color-stamp);
+  font-size: 16px;
+  line-height: 1.1;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 0 0 1.5px var(--color-peach),
+    inset 0 0 0 2.5px rgba(214, 45, 79, 0.45);
+}
+.nope-wrap[data-open] .nope-stamp {
+  animation: nope-stamp-in 0.38s cubic-bezier(0.2, 1.4, 0.5, 1) 0.12s both;
+}
+@keyframes nope-stamp-in {
+  from {
+    scale: 1.8;
+    opacity: 0;
+  }
+}
+.chip-in {
+  animation: chip-in 0.42s cubic-bezier(0.2, 1.5, 0.5, 1) both;
+}
+@keyframes chip-in {
+  from {
+    transform: scale(0.3) rotate(-8deg);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+}
+.chip-out {
+  pointer-events: none;
+  animation: chip-out 0.38s cubic-bezier(0.5, 0, 0.7, 0.4) forwards;
+}
+@keyframes chip-out {
+  to {
+    transform: translateY(-20px) scale(0.7) rotate(-6deg);
+    opacity: 0;
+  }
+}
+/* On a phone, the picking cards get shorter while the section shows, to leave it room for a couple of rows of chips. */
+@media not (min-width: 760px) {
+  .pick-pair > .pick-card {
+    transition-property: transform, opacity, box-shadow, min-height, padding, font-size;
+  }
+  .pick-pair > .pick-card h3 {
+    transition: font-size 0.3s ease;
+  }
+  .pick-pair.squeezed > .pick-card {
+    min-height: 0;
+    padding-inline: 16px;
+  }
+  .pick-pair.squeezed > .pick-card:first-child {
+    padding-top: 12px;
+  }
+  .pick-pair.squeezed > .pick-card:last-child {
+    padding-bottom: 12px;
+  }
+  .pick-pair.squeezed > .pick-card h3 {
+    font-size: 20px;
+  }
+  .pick-pair.squeezed .pick-note {
+    display: none;
+  }
+  .pick-pair.squeezed .pick-body {
+    gap: 2px;
+  }
+  .pick-pair.squeezed .pick-pills {
+    padding-top: 4px;
+  }
+}
+
+/* Together board: a changed rank's ▲/▼ badge pops on, holds and fades; a new 1st grows its flame. */
+.rank-badge {
+  animation: badge-pop 1.5s ease-out both;
+}
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  15% {
+    opacity: 1;
+    transform: none;
+  }
+  80% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.flame-in {
+  transform-origin: 50% 100%;
+  animation: flame-in 0.5s ease-out;
+}
+@keyframes flame-in {
+  from {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.4);
+  }
+}
+
+/* A new top pick: the old name moves up and out as the new one moves in from below. */
+.name-out {
+  animation: name-out 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.name-in {
+  animation: name-in 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+@keyframes name-out {
+  to {
+    transform: translateY(-110%);
+    opacity: 0;
+  }
+}
+@keyframes name-in {
+  from {
+    transform: translateY(110%);
+    opacity: 0;
+  }
+}
+
+/* "Pretty sure": the top card warms from the bottom, and a blaze rises from behind it past its top edge. */
+.on-fire {
+  background: linear-gradient(to top, #ff6a2e 0%, #ff9a3a 30%, var(--color-mustard) 65%, var(--color-mustard) 100%) 50% 100% / 100% 180%;
+  box-shadow: 0 12px 32px -8px rgba(232, 67, 44, 0.6);
+  animation: heat 2.2s ease-in-out infinite alternate;
+}
+@keyframes heat {
+  50% {
+    background-position: 50% 70%;
+  }
+  to {
+    background-position: 50% 88%;
+    box-shadow: 0 14px 38px -6px rgba(232, 67, 44, 0.8);
+  }
+}
+.blaze {
+  position: absolute;
+  z-index: 0;
+  top: -74px;
+  bottom: calc(100% - 36px);
+  left: 6px;
+  right: 6px;
+  pointer-events: none;
+}
+.blaze i {
+  position: absolute;
+  bottom: 0;
+  width: var(--s);
+  height: var(--s);
+  margin-left: calc(var(--s) / -2);
+  border-radius: 50%;
+  background: var(--c);
+  animation: rise var(--d) cubic-bezier(0.3, 0, 0.7, 1) var(--delay) infinite;
+}
+@keyframes rise {
+  85% {
+    opacity: 1;
+  }
+  to {
+    transform: translateY(calc(-1 * var(--h))) scale(0.1);
+    opacity: 0;
   }
 }
 
@@ -118,5 +471,28 @@ h3 {
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation: none !important;
+  }
+  /* Picking cards don't move: the stamp just appears, cards only fade. */
+  .pick-card,
+  .pick-or {
+    transition: opacity 0.15s !important;
+    transform: none !important;
+  }
+  .pick-pair > .pick-card {
+    animation: pair-fade-in 0.2s backwards !important;
+  }
+  .pick-pair > .pick-card.vetoed {
+    opacity: 0.2;
+  }
+  .pick-stamp {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(-10deg);
+  }
+  .confetti {
+    display: none;
+  }
+  /* The fire holds still mid-blaze rather than vanishing behind the card. */
+  .blaze i {
+    animation: rise var(--d) cubic-bezier(0.3, 0, 0.7, 1) var(--delay) infinite paused !important;
   }
 }

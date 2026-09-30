@@ -6,6 +6,7 @@ import {
   homeStep,
   INVITE,
   newSetViaApi,
+  pickCountry,
   PRETEND_ST_SUGGESTION,
   signInHere,
   signUp,
@@ -52,6 +53,7 @@ test('#37 AC1: straight after the PIN, a new person sees "How far is dinner?" be
 test('#37 AC2 + AC3: the field suggests addresses, shows the map, and "Save home" stores it and continues', async ({ page }) => {
   await stubMapTiles(page);
   await atHomeStep(page);
+  await pickCountry(homeStep(page));
   await homeStep(page).getByLabel('Address').fill('1 Pretend');
   await expect(homeStep(page).getByRole('list', { name: 'Suggestions' })).toBeVisible();
   await homeStep(page).getByRole('button', { name: PRETEND_ST_SUGGESTION }).click();
@@ -60,12 +62,13 @@ test('#37 AC2 + AC3: the field suggests addresses, shows the map, and "Save home
 
   await expectSignedIn(page);
   await expect(page).toHaveURL(/\/$/);
-  expect(await me(page)).toMatchObject({ home: { address: PRETEND_ST_SUGGESTION, lat: -37.7991, lng: 144.9671 }, homeSkipped: false });
+  expect(await me(page)).toMatchObject({ home: { address: PRETEND_ST_SUGGESTION, lat: -37.7991, lng: 144.9671, country: 'AU' }, homeSkipped: false });
 });
 
 test('#37 AC2: typing shows the "Searching…" row', async ({ page }) => {
   await page.route('**/api/geocode?*', () => undefined); // never answers
   await atHomeStep(page);
+  await pickCountry(homeStep(page));
   await homeStep(page).getByLabel('Address').fill('1 Pretend');
   await expect(homeStep(page).getByText('Searching addresses…')).toBeVisible();
 });
@@ -101,6 +104,7 @@ test('#37 AC4: saving home from a share link also lands in the session', async (
   const friend = await (await browser.newContext()).newPage();
   await stubMapTiles(friend);
   await atHomeStep(friend, session);
+  await pickCountry(homeStep(friend));
   await homeStep(friend).getByLabel('Address').fill('1 Pretend');
   await homeStep(friend).getByRole('button', { name: PRETEND_ST_SUGGESTION }).click();
   await homeStep(friend).getByRole('button', { name: 'Save home' }).click();
@@ -130,6 +134,12 @@ for (const [label, size] of [
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);
     await expect(homeStep(page).locator('svg[aria-hidden="true"]').first()).toBeAttached();
     await expect(homeStep(page).getByRole('img')).toHaveCount(0);
+
+    await expect(homeStep(page).getByLabel('Country', { exact: true })).toBeFocused();
+    await page.keyboard.type('Austral');
+    await page.keyboard.press('Tab');
+    await expect(homeStep(page).getByRole('button', { name: 'Australia' })).toBeFocused();
+    await page.keyboard.press('Enter');
 
     const field = homeStep(page).getByLabel('Address');
     await expect(field).toBeFocused();

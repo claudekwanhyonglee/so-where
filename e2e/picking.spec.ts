@@ -44,12 +44,62 @@ test('#17 AC1: cards show name, suburb, note, Maps link and directions; a place 
 
 test('#17 AC1: with a home address the card shows transit minutes instead of directions', async ({ page }) => {
   await signUp(page, uniqueName('Homebody'));
-  await page.request.put('/api/me/home', { data: { address: '1 Pretend St, Carlton', lat: -37.79, lng: 144.97 } });
+  await page.request.put('/api/me/home', { data: { address: '1 Pretend St, Carlton', lat: -37.79, lng: 144.97, country: 'AU' } });
   await openSession(page, 2);
   for (const card of await cards(page).all()) {
     await expect(card).toContainText('25 min');
     await expect(card.getByRole('link', { name: /directions/i })).toHaveCount(0);
   }
+});
+
+const HOME = '1 Pretend St, Carlton';
+const directionsParams = async (link: import('@playwright/test').Locator) => Object.fromEntries(new URL((await link.getAttribute('href'))!).searchParams);
+
+test('#52 AC1 + AC3: the time pill links to transit directions from home to the place, and tapping it does not pick', async ({ page }) => {
+  await signUp(page, uniqueName('Commuter'));
+  await page.request.put('/api/me/home', { data: { address: HOME, lat: -37.79, lng: 144.97, country: 'AU' } });
+  await page.context().route('https://www.google.com/**', (route) => route.fulfill({ body: 'Google Maps' }));
+  await openSession(page, 2);
+  const card = cards(page).first();
+  const name = await cardName(page, 0);
+  const time = card.getByRole('link', { name: /25 min/ });
+  expect(await directionsParams(time)).toEqual({ api: '1', origin: HOME, destination: `${name}, Carlton`, travelmode: 'transit' });
+
+  let picks = 0;
+  page.on('request', (r) => r.url().endsWith('/picks') && picks++);
+  const opened = page.context().waitForEvent('page');
+  await time.click();
+  await (await opened).close();
+  await page.waitForTimeout(500);
+  expect(picks).toBe(0);
+  await pickCount(page, 0);
+  await expect(cards(page).first()).toContainText(name);
+});
+
+test('#52 AC2: Directions (when there is no time) also start from home', async ({ page }) => {
+  await signUp(page, uniqueName('Wanderer'));
+  await page.request.put('/api/me/home', { data: { address: HOME, lat: -37.79, lng: 144.97, country: 'AU' } });
+  await page.route('**/api/sessions/*/transit?*', (route) => route.fulfill({ json: { minutes: null, reason: 'no-trip' } }));
+  await openSession(page, 2);
+  const name = await cardName(page, 0);
+  expect(await directionsParams(cards(page).first().getByRole('link', { name: /directions/i }))).toMatchObject({ origin: HOME, destination: `${name}, Carlton` });
+});
+
+test('#52 AC4: the Maps pill uses the map icon', async ({ page }) => {
+  await signUp(page, uniqueName('Mapper'));
+  await openSession(page, 2);
+  const maps = cards(page).first().getByRole('link', { name: 'Open in Google Maps' });
+  await expect(maps.locator('svg.lucide-map')).toHaveCount(1);
+  await expect(maps.locator('svg.lucide-external-link')).toHaveCount(0);
+});
+
+test('#52 AC5: no arrow-key hints on a desktop', async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  await signUp(page, uniqueName('Hintless'));
+  await openSession(page, 2);
+  await expect(page.getByRole('button', { name: 'Too close to call' })).toBeVisible();
+  await expect(page.locator('kbd')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Pick', exact: true }).getByText(/^(pick|tie)$/)).toHaveCount(0);
 });
 
 test('#17 AC2 + AC3: tapping a card picks it; Too close to call records a tie', async ({ page }) => {
