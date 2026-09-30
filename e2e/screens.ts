@@ -1,5 +1,5 @@
 import { expect, type Browser, type BrowserContextOptions, type Locator, type Page } from '@playwright/test';
-import { INVITE } from './helpers.ts';
+import { INVITE, placeLink, uniqueName } from './helpers.ts';
 
 /** A screen size from the layout audit (epic #59). Phones and the tablet get touch and mobile emulation. */
 export type Screen = { name: string; width: number; height: number; mobile: boolean };
@@ -36,7 +36,40 @@ export async function personNamed(browser: Browser, name: string) {
   return { state, request, close: () => context.close() };
 }
 
-type StorageState =Exclude<BrowserContextOptions['storageState'], string | undefined>;
+const HOME = { address: '1 Pretend Street, Carlton, Melbourne, Victoria, Australia', lat: -37.7991, lng: 144.9671, country: 'AU' };
+
+/**
+ * A picking session over new places (name, and optional note), in a set called `setName`, started by a new person.
+ * `friends` more people join it (the first is the one with the long name); `home` gives the starter travel times.
+ */
+export async function pickingSession(browser: Browser, { places, setName = uniqueName('Screens '), friends = 0, home = false }: { places: (string | [string, string])[]; setName?: string; friends?: number; home?: boolean }) {
+  const me = await personNamed(browser, uniqueName('Picker'));
+  if (home) await me.request.put('/api/me/home', { data: HOME });
+  const placeIds: number[] = [];
+  for (const [i, entry] of places.entries()) {
+    const [name, note] = typeof entry === 'string' ? [entry, ''] : entry;
+    const { place } = await (await me.request.post('/api/places', { data: { url: placeLink(name, -37.8 + i * 0.003), note } })).json();
+    placeIds.push(place.id);
+  }
+  const { id: setId } = await (await me.request.post('/api/sets', { data: { name: setName } })).json();
+  for (const id of placeIds) await me.request.put(`/api/sets/${setId}/places/${id}`);
+  const { id: sessionId } = await (await me.request.post('/api/sessions', { data: { setId } })).json();
+  const others: (typeof me)[] = [];
+  for (let i = 0; i < friends; i++) {
+    const friend = await personNamed(browser, i === 0 ? LONG_PERSON : uniqueName('Friend'));
+    await friend.request.post(`/api/sessions/${sessionId}/join`, { data: {} });
+    others.push(friend);
+  }
+  const veto = (placeId: number, who = me) => who.request.post(`/api/sessions/${sessionId}/vetoes`, { data: { placeId } });
+  const close = () => Promise.all([me, ...others].map((p) => p.close()));
+  return { me, others, sessionId: sessionId as string, path: `/s/${sessionId}`, placeIds, veto, close };
+}
+
+/** Waits for running (not endless) animations to finish, so boxes can be measured. */
+export const settled = (page: Page) =>
+  page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined))));
+
+type StorageState = Exclude<BrowserContextOptions['storageState'], string | undefined>;
 
 /** A fresh browser at `screen`'s size, signed in as whoever `storageState` belongs to (nobody if left out). */
 export async function openOn(browser: Browser, s: Screen, storageState?: StorageState) {

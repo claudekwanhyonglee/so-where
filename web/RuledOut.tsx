@@ -51,11 +51,11 @@ export function RuledOut({ vetoes, meId, onBringBack }: { vetoes: Veto[]; meId: 
 }
 
 function NopeChip({ veto, mine, fresh, leaving, onBringBack }: { veto: Veto; mine: boolean; fresh: boolean; leaving: boolean; onBringBack: () => void }) {
-  const look = `nope-chip inline-flex items-center gap-[7px] rounded-full bg-white py-1.5 pl-3 text-[13px] font-bold whitespace-nowrap ring-[1.5px] ring-edge ring-inset ${fresh ? 'chip-in' : ''} ${leaving ? 'chip-out' : ''}`;
+  const look = `nope-chip inline-flex max-w-full items-center gap-[7px] rounded-full bg-white py-1.5 pl-3 text-[13px] font-bold whitespace-nowrap ring-[1.5px] ring-edge ring-inset ${fresh ? 'chip-in' : ''} ${leaving ? 'chip-out' : ''}`;
   const content = (
     <>
-      <s className="decoration-stamp decoration-[1.5px]">{veto.name}</s>
-      <span className="text-[10px] font-extrabold tracking-[.1em] text-stamp uppercase">{mine ? 'You' : veto.by.name}</span>
+      <s className="min-w-0 truncate decoration-stamp decoration-[1.5px]">{veto.name}</s>
+      <span className="max-w-[12em] min-w-0 flex-none truncate text-[10px] font-extrabold tracking-[.1em] text-stamp uppercase">{mine ? 'You' : veto.by.name}</span>
     </>
   );
   if (!mine)
@@ -67,7 +67,7 @@ function NopeChip({ veto, mine, fresh, leaving, onBringBack }: { veto: Veto; min
   return (
     <button data-testid="nope-chip" aria-label={`Bring ${veto.name} back`} disabled={leaving} onClick={onBringBack} className={`${look} pr-[7px] hover:ring-leaf`}>
       {content}
-      <span aria-hidden="true" className="grid size-[22px] place-items-center rounded-full bg-leaf text-xs font-black text-peach">
+      <span aria-hidden="true" className="grid size-[22px] flex-none place-items-center rounded-full bg-leaf text-xs font-black text-peach">
         ↺
       </span>
     </button>

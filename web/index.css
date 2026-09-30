@@ -238,22 +238,27 @@
   }
 }
 
-/* "Absolutely not" under the picking cards: folds open (0fr → 1fr) when the first place is ruled out and takes the
-   room left below, its chips scrolling inside with a fade at the bottom. Hidden entirely when folded. */
+/* "Absolutely not" under the picking cards: folds open when the first place is ruled out, always to the same height
+   (so the cards shrink by the same amount however many there are), its chips scrolling inside with a fade at the
+   bottom. Hidden entirely when folded. */
 .nope-wrap {
+  --nope-h: 132px;
+  @variant desk {
+    --nope-h: min(200px, 34%);
+  }
   display: grid;
-  flex: 0 1 auto;
-  min-height: 0;
-  grid-template-rows: 0fr;
+  flex: none;
+  height: 0;
+  grid-template-rows: minmax(0, 1fr);
   visibility: hidden;
   transition:
-    grid-template-rows 0.4s cubic-bezier(0.3, 0.9, 0.3, 1),
+    height 0.4s cubic-bezier(0.3, 0.9, 0.3, 1),
     visibility 0s 0.4s;
 }
 .nope-wrap[data-open] {
-  grid-template-rows: 1fr;
+  height: var(--nope-h);
   visibility: visible;
-  transition: grid-template-rows 0.4s cubic-bezier(0.3, 0.9, 0.3, 1);
+  transition: height 0.4s cubic-bezier(0.3, 0.9, 0.3, 1);
 }
 .nope-wrap:not([data-open]) .nope-chip {
   opacity: 0;
@@ -312,13 +317,12 @@
 /* On a phone, the picking cards get shorter while the section shows, to leave it room for a couple of rows of chips. */
 @media not (min-width: 760px) {
   .pick-pair > .pick-card {
-    transition-property: transform, opacity, box-shadow, min-height, padding, font-size;
+    transition-property: transform, opacity, box-shadow, padding, font-size;
   }
   .pick-pair > .pick-card h3 {
     transition: font-size 0.3s ease;
   }
   .pick-pair.squeezed > .pick-card {
-    min-height: 0;
     padding-inline: 16px;
   }
   .pick-pair.squeezed > .pick-card:first-child {

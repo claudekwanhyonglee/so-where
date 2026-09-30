@@ -317,8 +317,8 @@ function Picker({ sessionId, home, meId, board, call, onChanged }: { sessionId: 
   };
 
   return (
-    <section aria-label="Pick" className="flex h-full min-h-0 flex-col gap-3.5 max-desk:has-[.squeezed]:gap-2.5 [&>*]:flex-none">
-      <div className="flex items-center justify-between text-[13px]">
+    <section aria-label="Pick" className="flex h-full min-h-0 flex-col gap-3.5 max-desk:has-[.squeezed]:gap-2.5">
+      <div className="flex flex-none items-center justify-between text-[13px]">
         <span className="text-muted">
           <span className="desk:hidden">Tap</span>
           <span className="hidden desk:inline">Click</span> the one you'd rather
@@ -330,13 +330,13 @@ function Picker({ sessionId, home, meId, board, call, onChanged }: { sessionId: 
         <>
           <div
             key={`${pair[0].id}-${pair[1].id}-${state.picks}`}
-            className={`pick-pair flex flex-col desk:flex-row ${outcome ? 'busy' : ''} ${ruledOut.vetoes.length ? 'squeezed' : ''}`}
+            className={`pick-pair relative grid min-h-0 flex-1 grid-rows-2 gap-2.5 desk:max-h-[440px] desk:grid-cols-2 desk:grid-rows-1 desk:gap-3.5 ${outcome ? 'busy' : ''} ${ruledOut.vetoes.length ? 'squeezed' : ''}`}
           >
             <PlaceCard sessionId={sessionId} home={home} place={pair[0]} position="first" state={cardState(pair[0].id)} onPick={() => choose(pair[0].id)} onVeto={() => veto(pair[0])} />
             <span
               data-testid="or"
               aria-hidden="true"
-              className="pick-or pointer-events-none relative z-[2] -my-[17px] grid size-11 place-items-center self-center rounded-full bg-ink text-[13px] font-extrabold tracking-[.04em] text-mustard ring-[5px] ring-peach desk:-mx-[17px] desk:my-0"
+              className="pick-or pointer-events-none absolute inset-0 z-[2] m-auto grid size-11 place-items-center rounded-full bg-ink text-[13px] font-extrabold tracking-[.04em] text-mustard ring-[5px] ring-peach"
             >
               OR
             </span>
@@ -444,7 +444,7 @@ function PlaceCard({
   return (
     <article
       style={{ background: bg, color: fg, ['--card' as string]: bg }}
-      className={`pick-card relative flex min-h-[170px] flex-1 flex-col rounded-[28px] p-[18px] desk:min-h-[280px] desk:rounded-[34px] desk:p-7 ${seam} ${state}`}
+      className={`pick-card relative flex min-h-0 min-w-0 flex-col rounded-[28px] p-[18px] desk:rounded-[34px] desk:p-7 ${seam} ${state}`}
     >
       {state === 'chosen' && (
         <>
@@ -457,11 +457,12 @@ function PlaceCard({
       <button aria-label="Absolutely not" title="Absolutely not" onClick={onVeto} className={`absolute top-3.5 right-3.5 z-10 grid size-9 place-items-center rounded-full ${pill}`}>
         <Ban size={18} aria-hidden="true" />
       </button>
-      <div className="pick-body pointer-events-none relative flex flex-1 flex-col gap-[5px]">
-        <h3 className="pr-10 font-display text-[25px]/[1.08] desk:text-[40px]/[1.08]">{place.name}</h3>
-        <span className="opacity-80">{place.suburb ?? 'Suburb unknown'}</span>
-        {place.note && <span className="pick-note text-sm italic opacity-90">“{place.note}”</span>}
-        <div className="pick-pills mt-auto flex flex-wrap gap-1.5 pt-2 [&>*]:inline-flex [&>*]:items-center [&>*]:gap-[5px] [&>*]:rounded-full [&>*]:px-[11px] [&>*]:py-[5px] [&>*]:text-[13px] [&>*]:font-bold [&>a]:pointer-events-auto">
+      {/* Every card is the same size whatever it says: long titles and notes are cut short, and the note gives way first. */}
+      <div className="pick-body pointer-events-none relative flex min-h-0 flex-1 flex-col gap-[5px] overflow-clip [overflow-clip-margin:8px]">
+        <h3 className="line-clamp-2 flex-none pr-10 font-display text-[25px]/[1.08] wrap-anywhere desk:text-[40px]/[1.08]">{place.name}</h3>
+        <span className="flex-none truncate opacity-80">{place.suburb ?? 'Suburb unknown'}</span>
+        {place.note && <span className="pick-note line-clamp-2 min-h-0 text-sm italic opacity-90">“{place.note}”</span>}
+        <div className="pick-pills mt-auto flex flex-none flex-wrap gap-1.5 pt-2 [&>*]:inline-flex [&>*]:items-center [&>*]:gap-[5px] [&>*]:rounded-full [&>*]:px-[11px] [&>*]:py-[5px] [&>*]:text-[13px] [&>*]:font-bold [&>a]:pointer-events-auto">
           {shown === 'time' && (
             <a href={directions} target="_blank" rel="noreferrer" className={pill} title="By public transport from home, leaving now. Opens directions in Google Maps.">
               <TramFront size={16} aria-hidden="true" /> {transit?.minutes} min
