@@ -1,10 +1,9 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { toast } from 'sonner';
 import { api } from './api.ts';
 import type { Me } from './App.tsx';
 import { countryByCode, flagUrl, matchCountries, type Country } from './countries.ts';
 import { lookupAnnouncement, MapPreview, SuggestionList, useLookup, type Point } from './search.tsx';
-import { Button, Field, inputBox, Notice, Sheet, useSubmit } from './ui.tsx';
+import { Button, Field, inputBox, Notice, notify, Sheet, useSubmit } from './ui.tsx';
 
 /** Setting your home in a sheet: from the You page, and when a session asks. */
 export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me; onSaved: () => void; close: () => void; offerNotNow?: boolean }) {
@@ -17,7 +16,7 @@ export function HomeSheet({ me, onSaved, close, offerNotNow = false }: { me: Me;
         onSaved={() => {
           onSaved();
           close();
-          toast('Home saved');
+          notify('Home saved');
         }}
       >
         {offerNotNow && (

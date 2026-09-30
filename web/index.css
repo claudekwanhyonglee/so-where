@@ -2,8 +2,14 @@
 @import '@fontsource/shrikhand';
 @import '@fontsource-variable/figtree';
 
+/* The desktop layout needs room both ways; anything smaller (landscape phones too) gets the phone layout. Keep in step
+   with DESKTOP_QUERY in ui.tsx. `phone` is its opposite; `land` and `port` are phones held sideways and upright. */
+@custom-variant desk (@media (min-width: 760px) and (min-height: 500px));
+@custom-variant phone (@media not ((min-width: 760px) and (min-height: 500px)));
+@custom-variant land (@media (orientation: landscape) and (max-height: 499px));
+@custom-variant port (@media (orientation: portrait) and (max-width: 759px));
+
 @theme {
-  --breakpoint-desk: 760px;
 
   --font-sans: 'Figtree Variable', system-ui, sans-serif;
   --font-display: Shrikhand, Georgia, serif;
@@ -238,22 +244,30 @@
   }
 }
 
-/* "Absolutely not" under the picking cards: folds open (0fr → 1fr) when the first place is ruled out and takes the
-   room left below, its chips scrolling inside with a fade at the bottom. Hidden entirely when folded. */
+/* "Absolutely not" under the picking cards: folds open when the first place is ruled out, always to the same height
+   (so the cards shrink by the same amount however many there are), its chips scrolling inside with a fade at the
+   bottom. Hidden entirely when folded. */
 .nope-wrap {
+  --nope-h: clamp(88px, 17dvh, 132px);
+  @variant desk {
+    --nope-h: min(200px, 34%);
+  }
+  @variant land {
+    --nope-h: 34px;
+  }
   display: grid;
-  flex: 0 1 auto;
-  min-height: 0;
-  grid-template-rows: 0fr;
+  flex: none;
+  height: 0;
+  grid-template-rows: minmax(0, 1fr);
   visibility: hidden;
   transition:
-    grid-template-rows 0.4s cubic-bezier(0.3, 0.9, 0.3, 1),
+    height 0.4s cubic-bezier(0.3, 0.9, 0.3, 1),
     visibility 0s 0.4s;
 }
 .nope-wrap[data-open] {
-  grid-template-rows: 1fr;
+  height: var(--nope-h);
   visibility: visible;
-  transition: grid-template-rows 0.4s cubic-bezier(0.3, 0.9, 0.3, 1);
+  transition: height 0.4s cubic-bezier(0.3, 0.9, 0.3, 1);
 }
 .nope-wrap:not([data-open]) .nope-chip {
   opacity: 0;
@@ -261,6 +275,9 @@
 }
 .nope-items {
   mask-image: linear-gradient(#000 calc(100% - 24px), transparent);
+  @variant land {
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  }
 }
 .nope-stamp {
   border: 3px solid currentColor;
@@ -310,16 +327,17 @@
   }
 }
 /* On a phone, the picking cards get shorter while the section shows, to leave it room for a couple of rows of chips. */
-@media not (min-width: 760px) {
+@variant phone {
   .pick-pair > .pick-card {
-    transition-property: transform, opacity, box-shadow, min-height, padding, font-size;
+    transition-property: transform, opacity, box-shadow, padding, font-size;
   }
   .pick-pair > .pick-card h3 {
     transition: font-size 0.3s ease;
   }
   .pick-pair.squeezed > .pick-card {
-    min-height: 0;
-    padding-inline: 16px;
+    @variant port {
+      padding-inline: 16px;
+    }
   }
   .pick-pair.squeezed > .pick-card:first-child {
     padding-top: 12px;
@@ -338,6 +356,25 @@
   }
   .pick-pair.squeezed .pick-pills {
     padding-top: 4px;
+  }
+  .pick-pair.squeezed .pick-pills > * {
+    padding-block: 3px;
+  }
+  /* Short phones: the name and its buttons matter more than the suburb, which is on the leaderboard too. */
+  @media (orientation: portrait) and (max-height: 640px), (max-height: 340px) {
+    .pick-pair.squeezed .pick-suburb {
+      display: none;
+    }
+  }
+  @media (max-height: 640px) {
+    @variant port {
+      .pick-pair.squeezed > .pick-card:first-child {
+        padding-bottom: 24px;
+      }
+      .pick-pair.squeezed > .pick-card:last-child {
+        padding-top: 24px;
+      }
+    }
   }
 }
 
@@ -395,9 +432,10 @@
 }
 
 /* "Pretty sure": the top card warms from the bottom, and a blaze rises from behind it past its top edge. */
+/* The glow stays within the 16px the leaderboard column leaves either side of the card, so it's never cut off. */
 .on-fire {
   background: linear-gradient(to top, #ff6a2e 0%, #ff9a3a 30%, var(--color-mustard) 65%, var(--color-mustard) 100%) 50% 100% / 100% 180%;
-  box-shadow: 0 12px 32px -8px rgba(232, 67, 44, 0.6);
+  box-shadow: 0 10px 22px -8px rgba(232, 67, 44, 0.6);
   animation: heat 2.2s ease-in-out infinite alternate;
 }
 @keyframes heat {
@@ -406,16 +444,22 @@
   }
   to {
     background-position: 50% 88%;
-    box-shadow: 0 14px 38px -6px rgba(232, 67, 44, 0.8);
+    box-shadow: 0 12px 24px -9px rgba(232, 67, 44, 0.8);
   }
 }
+/* Blobs rise from 36px below the card's top by up to --fire-rise, less on a sideways phone, which has less room above
+   the card. Inset by the biggest blob's radius, so none pokes out past the card's sides. */
 .blaze {
+  --fire-rise: 120px;
+  @variant land {
+    --fire-rise: 76px;
+  }
   position: absolute;
   z-index: 0;
-  top: -74px;
+  top: calc(46px - var(--fire-rise));
   bottom: calc(100% - 36px);
-  left: 6px;
-  right: 6px;
+  left: 30px;
+  right: 30px;
   pointer-events: none;
 }
 .blaze i {
@@ -441,6 +485,9 @@
 :root {
   /* Height of the phone tab bar, so pages and toasts clear it. */
   --tabbar-h: calc(70px + env(safe-area-inset-bottom, 0px));
+  @variant land {
+    --tabbar-h: calc(44px + env(safe-area-inset-bottom, 0px));
+  }
   @variant desk {
     --tabbar-h: 0px;
   }
@@ -450,6 +497,11 @@ body {
   @apply bg-peach font-sans text-[15px]/[1.45] text-ink antialiased;
 }
 
+/* While a sheet is open the page behind it stays put; the sheet scrolls inside itself. */
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
 :focus-visible {
   @apply outline-3 outline-offset-2 outline-tomato;
 }
@@ -457,7 +509,7 @@ body {
 h1,
 h2,
 h3 {
-  text-wrap: balance;
+  text-wrap-style: balance; /* only the style: `text-wrap` would also undo `truncate`'s nowrap */
 }
 
 @media (prefers-reduced-motion: reduce) {

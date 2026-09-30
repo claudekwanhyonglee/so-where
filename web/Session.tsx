@@ -1,6 +1,5 @@
 import { Ban, ChevronLeft, Copy, Map as MapIcon, Share2, TramFront } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { toast } from 'sonner';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { api, ApiError, errorMessage } from './api.ts';
 import { Leaderboard, type Board } from './Leaderboard.tsx';
 import { RuledOut, vetoesIn, type RuledOutPlace } from './RuledOut.tsx';
@@ -9,7 +8,7 @@ import { HomeSheet } from './HomeSheet.tsx';
 import { googleMapsUrl, plural, swatch, transitDirectionsUrl, transitPill, type TransitAnswer } from './model.ts';
 import { Link } from './router.tsx';
 import { joinedNews, vetoNews } from './session-news.ts';
-import { Avatar, Button, Card, DESKTOP_QUERY, Eyebrow, Notice, Sheet, inputBox } from './ui.tsx';
+import { Avatar, Button, Card, DESKTOP_QUERY, Eyebrow, Notice, notify, Sheet, inputBox, useIsDesktop } from './ui.tsx';
 import { usePolling } from './usePolling.ts';
 
 export type CardPlace = { id: number; name: string; suburb: string | null; note: string; key: string; lat: number | null; lng: number | null };
@@ -65,6 +64,8 @@ function LiveSession({ id, meId, home, call }: { id: string; meId: number; home:
   useSessionNews(info, board, meId);
   const [view, setView] = useState<'pick' | 'board'>('pick');
   const [sharing, setSharing] = useState(false);
+  const [picks, setPicks] = useState<number | null>(null);
+  const [boardOverlay, setBoardOverlay] = useState<HTMLDivElement | null>(null);
   if (!info) return null;
 
   const link = `${location.origin}${info.sharePath}`;
@@ -82,28 +83,22 @@ function LiveSession({ id, meId, home, call }: { id: string; meId: number; home:
 
   return (
     <>
-      <SessionHeader info={info} onShare={share} />
-      <div role="group" aria-label="Session view" className="flex gap-0.5 rounded-full bg-soft p-[3px] desk:hidden">
-        {(['pick', 'board'] as const).map((v) => (
-          <button
-            key={v}
-            aria-pressed={view === v}
-            onClick={() => setView(v)}
-            className="flex-1 rounded-full px-2.5 py-[7px] text-[13px] font-semibold text-muted aria-pressed:bg-white aria-pressed:text-ink aria-pressed:shadow-[0_2px_6px_-2px_rgba(42,23,18,.25)]"
-          >
-            {v === 'pick' ? 'Pick' : 'Leaderboard'}
-          </button>
-        ))}
-      </div>
+      <SessionHeader info={info} picks={picks} onShare={share}>
+        <ViewToggle view={view} onChange={setView} />
+      </SessionHeader>
       {info.members.length === 1 && <SoloBanner onShare={share} />}
       {/* The screen never scrolls: each column scrolls inside itself. */}
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] gap-5 desk:grid-cols-[minmax(0,1fr)_340px]">
         <div className={shownOnPhone('pick')}>
-          <Picker sessionId={id} home={home} meId={meId} board={board} call={call} onChanged={() => setVersion((v) => v + 1)} />
+          <Picker sessionId={id} home={home} meId={meId} board={board} call={call} onChanged={() => setVersion((v) => v + 1)} onPicks={setPicks} />
         </div>
-        {/* Padded so the top card's stamp and rings aren't clipped by the scrolling. */}
-        <div className={`relative -mx-2 overflow-y-auto px-2 ${shownOnPhone('board')}`}>
-          <Leaderboard board={board} />
+        <div className={`relative ${shownOnPhone('board')}`}>
+          {/* Padded so the top card's glow isn't clipped by the scrolling. */}
+          {/* `relative` so what's positioned inside (like screen-reader-only text) scrolls with it, not the page. */}
+          <div data-board-column className="relative -mx-4 -mt-1.5 h-[calc(100%+6px)] overflow-y-auto px-4 pt-1.5 pb-8">
+            <Leaderboard board={board} overlay={boardOverlay} />
+          </div>
+          <div ref={setBoardOverlay} className="pointer-events-none absolute inset-0" />
         </div>
       </div>
       {sharing && <ShareSheet link={link} members={info.members} board={board} meId={meId} onClose={() => setSharing(false)} />}
@@ -117,39 +112,83 @@ function useSessionNews(info: SessionInfo | null, board: Board | null, meId: num
   const rows = useRef<Board['combined'] | null>(null);
   useEffect(() => {
     if (!info) return;
-    joinedNews(members.current, info.members, meId).forEach((news) => toast(news));
+    joinedNews(members.current, info.members, meId).forEach((news) => notify(news));
     members.current = info.members;
   }, [info, meId]);
   useEffect(() => {
     if (!board) return;
-    vetoNews(rows.current, board.combined, board.people, meId).forEach((news) => toast(news));
+    vetoNews(rows.current, board.combined, board.people, meId).forEach((news) => notify(news));
     rows.current = board.combined;
   }, [board, meId]);
 }
 
-function SessionHeader({ info, onShare }: { info: SessionInfo; onShare: () => void }) {
+/** Upright phones show this many faces in the header, then "+N", so the set name keeps its room. */
+const FACES_ON_PORTRAIT = 3;
+
+/**
+ * The set being picked from, who's here and Share. On phones it also holds the Pick/Leaderboard toggle (`children`)
+ * and your pick count; desktops show the count above the cards instead. Upright, the name shares the top row only
+ * with Back and Share, the count sits on the "Picking from" line, and the toggle and faces go on a second row.
+ * Sideways, it's all one row, with the count next to the name.
+ */
+function SessionHeader({ info, picks, onShare, children }: { info: SessionInfo; picks: number | null; onShare: () => void; children: ReactNode }) {
+  const desktop = useIsDesktop();
+  const count = picks === null || desktop ? null : plural(picks, 'pick');
+  const hiddenOnPortrait = info.members.length - FACES_ON_PORTRAIT;
   return (
-    <header className="flex items-center gap-2.5">
-      <Link to="/" aria-label="Back" className="grid size-[38px] flex-none place-items-center rounded-full bg-white ring-1 ring-edge desk:hidden">
+    <header className="flex items-center gap-2.5 port:flex-wrap port:gap-y-0">
+      <span aria-hidden="true" className="order-1 hidden h-2.5 basis-full port:block" />
+      <Link to="/" aria-label="Back" className="grid size-[38px] flex-none place-items-center rounded-full bg-white ring-1 ring-edge desk:hidden land:size-[34px]">
         <ChevronLeft size={18} aria-hidden="true" />
       </Link>
-      <div className="min-w-0 flex-1">
-        <Eyebrow>Picking from</Eyebrow>
-        <h1 className="truncate font-display text-2xl/tight desk:text-3xl/tight">{info.setName}</h1>
+      <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,max-content)_1fr] items-baseline gap-x-1.5 [grid-template-areas:'eyebrow_count'_'name_name'] land:gap-x-2 land:[grid-template-areas:'eyebrow_eyebrow'_'name_count']">
+        <span className="whitespace-nowrap [grid-area:eyebrow]">
+          <Eyebrow>Picking from</Eyebrow>
+        </span>
+        <h1 className="truncate font-display text-2xl/tight [grid-area:name] desk:text-3xl/tight land:text-xl/tight">{info.setName}</h1>
+        {count && (
+          <small className="text-[11px] font-bold tracking-[.07em] whitespace-nowrap text-muted uppercase tabular-nums [grid-area:count] before:content-['·_'] land:text-xs land:tracking-normal land:normal-case land:before:content-none">
+            {count}
+          </small>
+        )}
       </div>
-      <ul aria-label="Who's here" className="flex [&>*+*]:-ml-2">
-        {info.members.map((m) => (
-          <li key={m.id}>
+      {children}
+      <ul aria-label="Who's here" className="flex flex-none port:order-3 [&>*+*]:-ml-2">
+        {info.members.map((m, i) => (
+          <li key={m.id} className={hiddenOnPortrait > 0 && i >= FACES_ON_PORTRAIT ? 'port:sr-only' : ''}>
             <Avatar person={m} />
             <span className="sr-only">{m.name}</span>
           </li>
         ))}
+        {hiddenOnPortrait > 0 && (
+          <li aria-hidden="true" className="hidden port:block">
+            <span className="grid size-7 place-items-center rounded-full bg-soft text-xs font-bold text-muted ring-2 ring-peach">+{hiddenOnPortrait}</span>
+          </li>
+        )}
       </ul>
-      <Button aria-label="Share" onClick={onShare} className="size-[38px] !p-0 desk:size-auto desk:!px-[18px] desk:!py-[11px]">
+      <Button aria-label="Share" onClick={onShare} className="size-[38px] flex-none !p-0 desk:size-auto desk:!px-[18px] desk:!py-[11px] land:size-[34px]">
         <Share2 size={18} aria-hidden="true" />
         <span className="hidden desk:inline">Share link</span>
       </Button>
     </header>
+  );
+}
+
+/** Phones only: picking or the leaderboard, in the session header. */
+function ViewToggle({ view, onChange }: { view: 'pick' | 'board'; onChange: (view: 'pick' | 'board') => void }) {
+  return (
+    <div role="group" aria-label="Session view" className="flex gap-0.5 rounded-full bg-soft p-[3px] desk:hidden port:order-2 port:flex-1">
+      {(['pick', 'board'] as const).map((v) => (
+        <button
+          key={v}
+          aria-pressed={view === v}
+          onClick={() => onChange(v)}
+          className="flex-1 rounded-full px-2.5 py-[7px] text-[13px] font-semibold text-muted aria-pressed:bg-white aria-pressed:text-ink aria-pressed:shadow-[0_2px_6px_-2px_rgba(42,23,18,.25)] land:px-3 land:py-[5px] land:text-[12.5px]"
+        >
+          {v === 'pick' ? 'Pick' : 'Leaderboard'}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -172,7 +211,7 @@ function ShareSheet({ link, members, board, meId, onClose }: { link: string; mem
     navigator.clipboard.writeText(link).then(
       () => {
         setCopied(true);
-        toast('Link copied');
+        notify('Link copied');
       },
       () => input.current?.select(), // no clipboard access: select it for a manual copy
     );
@@ -194,7 +233,7 @@ function ShareSheet({ link, members, board, meId, onClose }: { link: string; mem
         </div>
       </div>
       <Eyebrow>Here now</Eyebrow>
-      <ul className="flex flex-col divide-y divide-divider rounded-[22px] bg-white ring-1 ring-edge">
+      <ul aria-label="Here now" className="flex flex-col divide-y divide-divider rounded-[22px] bg-white ring-1 ring-edge">
         {members.map((m) => (
           <li key={m.id} className="flex items-center gap-3 px-3.5 py-3">
             <Avatar person={m} />
@@ -238,8 +277,28 @@ function useRuledOut(board: Board | null, meId: number) {
 
 const CHIP_LEAVE_MS = 380;
 
-function Picker({ sessionId, home, meId, board, call, onChanged }: { sessionId: string; home: Me['home']; meId: number; board: Board | null; call: SessionApi; onChanged: () => void }) {
+function Picker({
+  sessionId,
+  home,
+  meId,
+  board,
+  call,
+  onChanged,
+  onPicks,
+}: {
+  sessionId: string;
+  home: Me['home'];
+  meId: number;
+  board: Board | null;
+  call: SessionApi;
+  onChanged: () => void;
+  onPicks: (picks: number) => void;
+}) {
   const [state, setState] = useState<PairResponse | null>(null);
+  const picks = state?.picks;
+  useEffect(() => {
+    if (picks !== undefined) onPicks(picks);
+  }, [picks, onPicks]);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [error, setError] = useState('');
   const busy = useRef(false);
@@ -279,9 +338,10 @@ function Picker({ sessionId, home, meId, board, call, onChanged }: { sessionId: 
     if (!pair || busy.current) return;
     setOutcome(winner === null ? { kind: 'tie' } : { kind: 'pick', placeId: winner });
     const next = await answer(() => call<PairResponse>(`${base}/picks`, { body: { a: pair[0].id, b: pair[1].id, winner } }), winner === null ? TIE_FEEDBACK_MS : PICK_FEEDBACK_MS);
-    if (next && MILESTONES[next.picks]) toast(MILESTONES[next.picks]);
+    if (next && MILESTONES[next.picks]) notify(MILESTONES[next.picks]);
   };
   const ruledOut = useRuledOut(board, meId);
+  const desktop = useIsDesktop();
   const undoVeto = (place: CardPlace) => call<PairResponse>(`${base}/vetoes/${place.id}`, { method: 'DELETE' }).then(show, (err) => setError(errorMessage(err)));
   const ruleOutAgain = (place: RuledOutPlace) => {
     ruledOut.unhide(place.placeId);
@@ -293,7 +353,7 @@ function Picker({ sessionId, home, meId, board, call, onChanged }: { sessionId: 
       const [next] = await Promise.all([call<PairResponse>(`${base}/vetoes/${place.placeId}`, { method: 'DELETE' }), wait(CHIP_LEAVE_MS)]);
       ruledOut.hide(place.placeId);
       show(next);
-      toast(`${place.name} is back in`, { action: { label: 'Undo', onClick: () => void ruleOutAgain(place) } });
+      notify(`${place.name} is back in`, { action: { label: 'Undo', onClick: () => void ruleOutAgain(place) } });
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -303,7 +363,7 @@ function Picker({ sessionId, home, meId, board, call, onChanged }: { sessionId: 
     ruledOut.unhide(place.id);
     setOutcome({ kind: 'veto', placeId: place.id });
     const next = await answer(() => call<PairResponse>(`${base}/vetoes`, { body: { placeId: place.id } }), PICK_FEEDBACK_MS);
-    if (next) toast(`${place.name} is out for tonight`, { action: { label: 'Undo', onClick: () => void undoVeto(place) } });
+    if (next) notify(`${place.name} is out for tonight`, { action: { label: 'Undo', onClick: () => void undoVeto(place) } });
   };
 
   useDesktopPickKeys(pair ? { left: () => choose(pair[0].id), right: () => choose(pair[1].id), tie: () => choose(null) } : null);
@@ -317,32 +377,32 @@ function Picker({ sessionId, home, meId, board, call, onChanged }: { sessionId: 
   };
 
   return (
-    <section aria-label="Pick" className="flex h-full min-h-0 flex-col gap-3.5 max-desk:has-[.squeezed]:gap-2.5 [&>*]:flex-none">
-      <div className="flex items-center justify-between text-[13px]">
-        <span className="text-muted">
-          <span className="desk:hidden">Tap</span>
-          <span className="hidden desk:inline">Click</span> the one you'd rather
-        </span>
-        <span className="font-semibold tabular-nums">{plural(state.picks, 'pick')}</span>
-      </div>
+    <section aria-label="Pick" className="flex h-full min-h-0 flex-col gap-3.5 phone:gap-2.5 land:gap-2">
+      {/* Phones show the count in the header instead, to leave the cards the room. */}
+      {desktop && (
+        <div className="flex flex-none items-center justify-between text-[13px]">
+          <span className="text-muted">Click the one you'd rather</span>
+          <span className="font-semibold tabular-nums">{plural(state.picks, 'pick')}</span>
+        </div>
+      )}
       {error && <Notice tone="error">{error}</Notice>}
       {pair ? (
         <>
           <div
             key={`${pair[0].id}-${pair[1].id}-${state.picks}`}
-            className={`pick-pair flex flex-col desk:flex-row ${outcome ? 'busy' : ''} ${ruledOut.vetoes.length ? 'squeezed' : ''}`}
+            className={`pick-pair relative grid min-h-0 flex-1 grid-rows-2 gap-2.5 desk:max-h-[440px] desk:grid-cols-2 desk:grid-rows-1 desk:gap-3.5 land:grid-cols-2 land:grid-rows-1 ${outcome ? 'busy' : ''} ${ruledOut.vetoes.length ? 'squeezed' : ''}`}
           >
             <PlaceCard sessionId={sessionId} home={home} place={pair[0]} position="first" state={cardState(pair[0].id)} onPick={() => choose(pair[0].id)} onVeto={() => veto(pair[0])} />
             <span
               data-testid="or"
               aria-hidden="true"
-              className="pick-or pointer-events-none relative z-[2] -my-[17px] grid size-11 place-items-center self-center rounded-full bg-ink text-[13px] font-extrabold tracking-[.04em] text-mustard ring-[5px] ring-peach desk:-mx-[17px] desk:my-0"
+              className="pick-or pointer-events-none absolute inset-0 z-[2] m-auto grid size-11 place-items-center rounded-full bg-ink text-[13px] font-extrabold tracking-[.04em] text-mustard ring-[5px] ring-peach"
             >
               OR
             </span>
             <PlaceCard sessionId={sessionId} home={home} place={pair[1]} position="second" state={cardState(pair[1].id)} onPick={() => choose(pair[1].id)} onVeto={() => veto(pair[1])} />
           </div>
-          <Button variant="secondary" onClick={() => choose(null)} className="self-center">
+          <Button variant="secondary" onClick={() => choose(null)} className="self-center phone:py-2 phone:text-sm">
             Too close to call
           </Button>
         </>
@@ -438,13 +498,13 @@ function PlaceCard({
   const directions = transitDirectionsUrl(place, home?.address);
   const { bg, fg } = swatch(place.id);
   const pill = fg === '#2a1712' ? 'bg-ink/10 hover:bg-ink/20' : 'bg-white/20 hover:bg-white/30';
-  // On phones the OR badge sits on the seam, so the cards make room for it.
-  const seam = position === 'first' ? 'pb-8 desk:pb-7' : 'pt-7 desk:pt-7';
+  // The OR badge sits on the seam (below the first card on upright phones, beside it otherwise): the cards make room.
+  const seam = position === 'first' ? 'pb-8 desk:pb-7 land:pr-[30px] land:pb-3' : 'pt-7 desk:pt-7 land:pt-3 land:pl-[30px]';
 
   return (
     <article
       style={{ background: bg, color: fg, ['--card' as string]: bg }}
-      className={`pick-card relative flex min-h-[170px] flex-1 flex-col rounded-[28px] p-[18px] desk:min-h-[280px] desk:rounded-[34px] desk:p-7 ${seam} ${state}`}
+      className={`pick-card relative flex min-h-0 min-w-0 flex-col rounded-[28px] p-[18px] desk:rounded-[34px] desk:p-7 land:rounded-[22px] land:px-4 land:py-3 ${seam} ${state}`}
     >
       {state === 'chosen' && (
         <>
@@ -457,11 +517,12 @@ function PlaceCard({
       <button aria-label="Absolutely not" title="Absolutely not" onClick={onVeto} className={`absolute top-3.5 right-3.5 z-10 grid size-9 place-items-center rounded-full ${pill}`}>
         <Ban size={18} aria-hidden="true" />
       </button>
-      <div className="pick-body pointer-events-none relative flex flex-1 flex-col gap-[5px]">
-        <h3 className="pr-10 font-display text-[25px]/[1.08] desk:text-[40px]/[1.08]">{place.name}</h3>
-        <span className="opacity-80">{place.suburb ?? 'Suburb unknown'}</span>
-        {place.note && <span className="pick-note text-sm italic opacity-90">“{place.note}”</span>}
-        <div className="pick-pills mt-auto flex flex-wrap gap-1.5 pt-2 [&>*]:inline-flex [&>*]:items-center [&>*]:gap-[5px] [&>*]:rounded-full [&>*]:px-[11px] [&>*]:py-[5px] [&>*]:text-[13px] [&>*]:font-bold [&>a]:pointer-events-auto">
+      {/* Every card is the same size whatever it says: long titles and notes are cut short, and the note gives way first. */}
+      <div className="pick-body pointer-events-none relative flex min-h-0 flex-1 flex-col gap-[5px] overflow-clip [overflow-clip-margin:8px]">
+        <h3 className="line-clamp-2 flex-none pr-10 font-display text-[25px]/[1.08] wrap-anywhere desk:text-[40px]/[1.08] land:text-[22px]/[1.08]">{place.name}</h3>
+        <span className="pick-suburb flex-none truncate opacity-80">{place.suburb ?? 'Suburb unknown'}</span>
+        {place.note && <span className="pick-note line-clamp-2 min-h-0 text-sm italic opacity-90">“{place.note}”</span>}
+        <div className="pick-pills mt-auto flex flex-none flex-wrap gap-1.5 pt-2 [&>*]:inline-flex [&>*]:items-center [&>*]:gap-[5px] [&>*]:rounded-full [&>*]:px-[11px] [&>*]:py-[5px] [&>*]:text-[13px] [&>*]:font-bold [&>a]:pointer-events-auto land:[&>*]:py-[3px] land:[&>*]:text-xs">
           {shown === 'time' && (
             <a href={directions} target="_blank" rel="noreferrer" className={pill} title="By public transport from home, leaving now. Opens directions in Google Maps.">
               <TramFront size={16} aria-hidden="true" /> {transit?.minutes} min

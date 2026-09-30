@@ -1,10 +1,9 @@
 import { ChevronRight, House, Lock } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { toast } from 'sonner';
 import { api } from './api.ts';
 import type { Me } from './App.tsx';
 import { HomeSheet } from './HomeSheet.tsx';
-import { Avatar, Eyebrow, PinInput, PinWarning, Sheet } from './ui.tsx';
+import { Avatar, Eyebrow, notify, PinInput, PinWarning, Sheet } from './ui.tsx';
 
 export function Profile({ me, onChanged, onSignedOut }: { me: Me; onChanged: () => void; onSignedOut: () => void }) {
   const [sheet, setSheet] = useState<'home' | 'pin' | null>(null);
@@ -55,7 +54,7 @@ function Row({ icon, label, value, onClick }: { icon: ReactNode; label: string; 
       </span>
       <span className="flex-1 whitespace-nowrap">{label}</span>
       {value && <span className="max-w-[45%] truncate text-sm text-muted">{value}</span>}
-      <ChevronRight size={18} aria-hidden="true" />
+      <ChevronRight size={18} aria-hidden="true" className="flex-none" />
     </button>
   );
 }
@@ -67,7 +66,7 @@ function PinSheet({ close }: { close: () => void }) {
         onComplete={async (pin) => {
           await api('/me/pin', { method: 'PUT', body: { pin } });
           close();
-          toast('PIN changed');
+          notify('PIN changed');
         }}
       />
       <PinWarning />

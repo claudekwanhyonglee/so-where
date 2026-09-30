@@ -18,7 +18,8 @@ async function openSession(page: Page, count: number) {
 
 const cards = (page: Page) => page.getByRole('region', { name: 'Pick', exact: true }).getByRole('article');
 const cardName = async (page: Page, i: number) => (await cards(page).nth(i).getByRole('heading').innerText()).trim();
-const pickCount = (page: Page, n: number) => expect(page.getByRole('region', { name: 'Pick', exact: true }).getByText(n === 1 ? '1 pick' : `${n} picks`, { exact: true })).toBeVisible();
+/** Your pick count: above the cards on a desktop, in the header on a phone (#62). */
+const pickCount = (page: Page, n: number) => expect(page.getByText(n === 1 ? '1 pick' : `${n} picks`, { exact: true }).filter({ visible: true })).toBeVisible();
 
 test('#17 AC1: cards show name, suburb, note, Maps link and directions; a place keeps its colour', async ({ page }) => {
   await signUp(page, uniqueName('Looker'));
@@ -201,8 +202,9 @@ test('#17 AC7: without one, Share opens a sheet with the link, Copy, and who has
   await expect(sheet.getByRole('button', { name: 'Copied' })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(link);
 
-  await expect(sheet.getByRole('listitem').filter({ hasText: me })).toContainText('1 pick');
-  await expect(sheet.getByRole('listitem').filter({ hasText: friend.name })).toContainText('0 picks');
+  const hereNow = sheet.getByRole('list', { name: 'Here now' }); // not the toasts, which show in the sheet too (#63)
+  await expect(hereNow.getByRole('listitem').filter({ hasText: me })).toContainText('1 pick');
+  await expect(hereNow.getByRole('listitem').filter({ hasText: friend.name })).toContainText('0 picks');
 });
 
 test('#17 AC8: a Pick / Leaderboard toggle on phones; both side by side on desktops', async ({ page }) => {

@@ -166,9 +166,9 @@ for (const motion of ['no-preference', 'reduce'] as const) {
     // stamp over its top-right corner, warms up, and flames rise from behind it past its top edge.
     for (let round = 0; round < 3; round++) for (const who of [page, friend.page]) await agreeOnce(who);
     const card = topPick(page);
-    const stamp = card.getByTestId('pretty-sure');
+    const stamp = page.getByTestId('pretty-sure'); // drawn over the card, outside the scrolling board (#66)
     await expect(stamp).toBeVisible({ timeout: 5_000 });
-    await expect(stamp).toHaveText(/^Statistically\s*Pretty sure$/i);
+    await expect(stamp).toHaveText(/^Statistically\s*“Pretty sure”$/i); // #66 AC6
     const [cardBox, stampBox] = [(await card.boundingBox())!, (await stamp.boundingBox())!];
     expect(stampBox.y).toBeLessThan(cardBox.y + 10); // over the top edge…
     expect(stampBox.x + stampBox.width).toBeGreaterThan(cardBox.x + cardBox.width - 10); // …at the right
