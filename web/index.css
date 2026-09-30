@@ -490,6 +490,11 @@ body {
   @apply bg-peach font-sans text-[15px]/[1.45] text-ink antialiased;
 }
 
+/* While a sheet is open the page behind it stays put; the sheet scrolls inside itself. */
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
 :focus-visible {
   @apply outline-3 outline-offset-2 outline-tomato;
 }

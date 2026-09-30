@@ -269,7 +269,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      className="mx-0 mt-auto mb-0 max-h-[88dvh] w-full max-w-none overflow-y-auto rounded-t-[28px] bg-peach p-0 text-ink shadow-[0_30px_60px_-20px_rgba(0,0,0,.45)] backdrop:bg-ink/40 desk:m-auto desk:max-w-[460px] desk:rounded-[28px]"
+      className="mx-0 mt-auto mb-0 max-h-[88dvh] w-full max-w-none overflow-y-auto overscroll-contain rounded-t-[28px] bg-peach p-0 text-ink shadow-[0_30px_60px_-20px_rgba(0,0,0,.45)] backdrop:bg-ink/40 desk:m-auto desk:max-w-[460px] desk:rounded-[28px]"
     >
       <div className="flex flex-col gap-3.5 p-5 pb-[calc(22px+env(safe-area-inset-bottom,0px))] desk:pb-5">
         <span aria-hidden="true" className="-mt-2 mb-0.5 h-[5px] w-10 self-center rounded-full bg-[#e2cfc4] desk:hidden" />

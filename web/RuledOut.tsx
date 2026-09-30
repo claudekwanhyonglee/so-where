@@ -15,7 +15,8 @@ export const vetoesIn = (board: Board | null): Veto[] =>
  * out and folds away once the last is brought back. Your own chips bring their place back (`onBringBack` settles once
  * the chip has had time to leave). The chips scroll inside it.
  */
-export function RuledOut({ vetoes, meId, onBringBack }: { vetoes: Veto[]; meId: number; onBringBack: (place: RuledOutPlace) => Promise<void> }) {
+export function RuledOut({ vetoes: fromBoard, meId, onBringBack }: { vetoes: Veto[]; meId: number; onBringBack: (place: RuledOutPlace) => Promise<void> }) {
+  const vetoes = useArrivalOrder(fromBoard);
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
   const open = vetoes.length > 0;
   // While folding away, the last chips stay (faded) so the section doesn't jump shut.
@@ -73,6 +74,15 @@ function NopeChip({ veto, mine, fresh, leaving, onBringBack }: { veto: Veto; min
       </span>
     </button>
   );
+}
+
+/** The vetoes in the order they turned up, so chips already showing never move: a new one goes at the end. */
+function useArrivalOrder(vetoes: Veto[]) {
+  const order = useRef<string[]>([]);
+  const now = new Set(vetoes.map((v) => v.key));
+  const kept = order.current.filter((key) => now.has(key));
+  order.current = [...kept, ...vetoes.map((v) => v.key).filter((key) => !kept.includes(key))];
+  return [...vetoes].sort((a, b) => order.current.indexOf(a.key) - order.current.indexOf(b.key));
 }
 
 /** Whether a key turned up after the first render (so it pops in), rather than being there from the start. */
