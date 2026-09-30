@@ -1,6 +1,5 @@
 import { MapPin, Rows2, UserRound, type LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Toaster } from 'sonner';
 import { api, ApiError } from './api.ts';
 import { Home } from './Home.tsx';
 import { Places } from './Places.tsx';
@@ -8,7 +7,7 @@ import { SessionPage } from './Session.tsx';
 import { Profile } from './Profile.tsx';
 import { Link, usePath } from './router.tsx';
 import { SignIn, type SignedIn } from './SignIn.tsx';
-import { Avatar } from './ui.tsx';
+import { Avatar, Toasts } from './ui.tsx';
 
 export type Me = { id: number; name: string; home: { address: string; lat: number; lng: number; country: string | null } | null; homeSkipped: boolean; guideClosed: boolean };
 
@@ -41,7 +40,7 @@ export function App() {
           <Page path={path} me={me} refresh={refresh} homeJustSkipped={homeSkippedOn.path === path} />
         </Shell>
       )}
-      <Toaster position="bottom-center" offset={{ bottom: 'calc(var(--tabbar-h) + 16px)' }} mobileOffset={{ bottom: 'calc(var(--tabbar-h) + 16px)' }} />
+      <Toasts />
     </>
   );
 }

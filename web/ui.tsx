@@ -10,6 +10,7 @@ import {
   type ComponentProps,
   type ReactNode,
 } from 'react';
+import { toast, Toaster } from 'sonner';
 import { errorMessage } from './api.ts';
 import { swatch } from './model.ts';
 
@@ -256,7 +257,11 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   useEffect(() => {
     const dialog = ref.current!;
     dialog.showModal();
-    return () => dialog.close();
+    sheetOpened();
+    return () => {
+      dialog.close();
+      sheetClosed();
+    };
   }, []);
   return (
     <dialog
@@ -278,7 +283,50 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         </div>
         {children}
       </div>
+      <Toasts inSheet />
     </dialog>
+  );
+}
+
+// Toasts. An open sheet is a modal <dialog>, drawn in the top layer over everything else, so each sheet has its own
+// toaster for toasts shown while it's open; when the sheet closes, they carry on in the page's toaster.
+
+const SHEET_TOASTER = 'sheet';
+let sheetsOpen = 0;
+const showingInSheet = new Map<string | number, Parameters<typeof toast>>();
+
+/** Shows a toast in place of whatever toast is showing: only one at a time. */
+export function notify(...[message, options]: Parameters<typeof toast>) {
+  toast.dismiss();
+  showingInSheet.clear();
+  const toasterId = sheetsOpen > 0 ? SHEET_TOASTER : undefined;
+  const id = toast(message, { ...options, toasterId });
+  if (toasterId) showingInSheet.set(id, [message, options]);
+  return id;
+}
+
+function sheetOpened() {
+  sheetsOpen++;
+}
+
+function sheetClosed() {
+  if (--sheetsOpen > 0) return;
+  for (const [id, [message, options]] of showingInSheet) toast(message, { ...options, id, toasterId: undefined });
+  showingInSheet.clear();
+}
+
+/** Where toasts show: at the bottom on desktops; at the top on phones, clear of the picking controls and tab bar. */
+export function Toasts({ inSheet = false }: { inSheet?: boolean }) {
+  const desktop = useIsDesktop();
+  const top = 'calc(env(safe-area-inset-top, 0px) + 10px)';
+  return (
+    <Toaster
+      id={inSheet ? SHEET_TOASTER : undefined}
+      visibleToasts={1}
+      position={desktop ? 'bottom-center' : 'top-center'}
+      offset={desktop ? { bottom: '16px' } : { top }}
+      mobileOffset={{ top }}
+    />
   );
 }
 

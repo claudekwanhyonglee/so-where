@@ -1,6 +1,5 @@
 import { Check, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import { api } from './api.ts';
 import type { Me } from './App.tsx';
 import { MIN_PLACES_TO_PICK, plural, relativeDay } from './model.ts';
@@ -8,7 +7,7 @@ import { Link, navigate } from './router.tsx';
 import { Guide } from './Guide.tsx';
 import { Confirm } from './PlaceSheets.tsx';
 import { useSets, type SetSummary } from './Places.tsx';
-import { Avatars, Button, Eyebrow, IconButton, Notice, SetTile, Sheet, useSubmit } from './ui.tsx';
+import { Avatars, Button, Eyebrow, IconButton, Notice, notify, SetTile, Sheet, useSubmit } from './ui.tsx';
 
 type RecentSession = { id: string; setId: number | null; setName: string; createdAt: number; members: { id: number; name: string }[]; topPick: string | null };
 
@@ -124,7 +123,7 @@ function RecentSessions() {
   const deleted = (id: string) => {
     setSessions((was) => was.filter((s) => s.id !== id));
     setDeleting(null);
-    toast('Session deleted');
+    notify('Session deleted');
   };
   return (
     <section aria-label="Recent" className="flex flex-col gap-1.5">

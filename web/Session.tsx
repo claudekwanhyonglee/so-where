@@ -1,6 +1,5 @@
 import { Ban, ChevronLeft, Copy, Map as MapIcon, Share2, TramFront } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { toast } from 'sonner';
 import { api, ApiError, errorMessage } from './api.ts';
 import { Leaderboard, type Board } from './Leaderboard.tsx';
 import { RuledOut, vetoesIn, type RuledOutPlace } from './RuledOut.tsx';
@@ -9,7 +8,7 @@ import { HomeSheet } from './HomeSheet.tsx';
 import { googleMapsUrl, plural, swatch, transitDirectionsUrl, transitPill, type TransitAnswer } from './model.ts';
 import { Link } from './router.tsx';
 import { joinedNews, vetoNews } from './session-news.ts';
-import { Avatar, Button, Card, DESKTOP_QUERY, Eyebrow, Notice, Sheet, inputBox, useIsDesktop } from './ui.tsx';
+import { Avatar, Button, Card, DESKTOP_QUERY, Eyebrow, Notice, notify, Sheet, inputBox, useIsDesktop } from './ui.tsx';
 import { usePolling } from './usePolling.ts';
 
 export type CardPlace = { id: number; name: string; suburb: string | null; note: string; key: string; lat: number | null; lng: number | null };
@@ -108,12 +107,12 @@ function useSessionNews(info: SessionInfo | null, board: Board | null, meId: num
   const rows = useRef<Board['combined'] | null>(null);
   useEffect(() => {
     if (!info) return;
-    joinedNews(members.current, info.members, meId).forEach((news) => toast(news));
+    joinedNews(members.current, info.members, meId).forEach((news) => notify(news));
     members.current = info.members;
   }, [info, meId]);
   useEffect(() => {
     if (!board) return;
-    vetoNews(rows.current, board.combined, board.people, meId).forEach((news) => toast(news));
+    vetoNews(rows.current, board.combined, board.people, meId).forEach((news) => notify(news));
     rows.current = board.combined;
   }, [board, meId]);
 }
@@ -207,7 +206,7 @@ function ShareSheet({ link, members, board, meId, onClose }: { link: string; mem
     navigator.clipboard.writeText(link).then(
       () => {
         setCopied(true);
-        toast('Link copied');
+        notify('Link copied');
       },
       () => input.current?.select(), // no clipboard access: select it for a manual copy
     );
@@ -334,7 +333,7 @@ function Picker({
     if (!pair || busy.current) return;
     setOutcome(winner === null ? { kind: 'tie' } : { kind: 'pick', placeId: winner });
     const next = await answer(() => call<PairResponse>(`${base}/picks`, { body: { a: pair[0].id, b: pair[1].id, winner } }), winner === null ? TIE_FEEDBACK_MS : PICK_FEEDBACK_MS);
-    if (next && MILESTONES[next.picks]) toast(MILESTONES[next.picks]);
+    if (next && MILESTONES[next.picks]) notify(MILESTONES[next.picks]);
   };
   const ruledOut = useRuledOut(board, meId);
   const desktop = useIsDesktop();
@@ -349,7 +348,7 @@ function Picker({
       const [next] = await Promise.all([call<PairResponse>(`${base}/vetoes/${place.placeId}`, { method: 'DELETE' }), wait(CHIP_LEAVE_MS)]);
       ruledOut.hide(place.placeId);
       show(next);
-      toast(`${place.name} is back in`, { action: { label: 'Undo', onClick: () => void ruleOutAgain(place) } });
+      notify(`${place.name} is back in`, { action: { label: 'Undo', onClick: () => void ruleOutAgain(place) } });
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -359,7 +358,7 @@ function Picker({
     ruledOut.unhide(place.id);
     setOutcome({ kind: 'veto', placeId: place.id });
     const next = await answer(() => call<PairResponse>(`${base}/vetoes`, { body: { placeId: place.id } }), PICK_FEEDBACK_MS);
-    if (next) toast(`${place.name} is out for tonight`, { action: { label: 'Undo', onClick: () => void undoVeto(place) } });
+    if (next) notify(`${place.name} is out for tonight`, { action: { label: 'Undo', onClick: () => void undoVeto(place) } });
   };
 
   useDesktopPickKeys(pair ? { left: () => choose(pair[0].id), right: () => choose(pair[1].id), tie: () => choose(null) } : null);
