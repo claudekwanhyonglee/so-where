@@ -65,6 +65,7 @@ function LiveSession({ id, meId, home, call }: { id: string; meId: number; home:
   const [view, setView] = useState<'pick' | 'board'>('pick');
   const [sharing, setSharing] = useState(false);
   const [picks, setPicks] = useState<number | null>(null);
+  const [boardOverlay, setBoardOverlay] = useState<HTMLDivElement | null>(null);
   if (!info) return null;
 
   const link = `${location.origin}${info.sharePath}`;
@@ -91,9 +92,13 @@ function LiveSession({ id, meId, home, call }: { id: string; meId: number; home:
         <div className={shownOnPhone('pick')}>
           <Picker sessionId={id} home={home} meId={meId} board={board} call={call} onChanged={() => setVersion((v) => v + 1)} onPicks={setPicks} />
         </div>
-        {/* Padded so the top card's stamp and rings aren't clipped by the scrolling. */}
-        <div className={`relative -mx-2 overflow-y-auto px-2 ${shownOnPhone('board')}`}>
-          <Leaderboard board={board} />
+        <div className={`relative ${shownOnPhone('board')}`}>
+          {/* Padded so the top card's glow isn't clipped by the scrolling. */}
+          {/* `relative` so what's positioned inside (like screen-reader-only text) scrolls with it, not the page. */}
+          <div data-board-column className="relative -mx-4 -mt-1.5 h-[calc(100%+6px)] overflow-y-auto px-4 pt-1.5 pb-8">
+            <Leaderboard board={board} overlay={boardOverlay} />
+          </div>
+          <div ref={setBoardOverlay} className="pointer-events-none absolute inset-0" />
         </div>
       </div>
       {sharing && <ShareSheet link={link} members={info.members} board={board} meId={meId} onClose={() => setSharing(false)} />}

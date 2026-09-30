@@ -1,5 +1,6 @@
 import { Crown } from 'lucide-react';
-import { startTransition, useEffect, useRef, useState, ViewTransition, type ReactNode } from 'react';
+import { startTransition, useEffect, useRef, useState, ViewTransition, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { medal, ordinal, rankChanges, rankSnapshot } from './medals.ts';
 import { plural } from './model.ts';
 import { Eyebrow, Stamp } from './ui.tsx';
@@ -8,7 +9,8 @@ type Person = { id: number; name: string; picks: number; ranking: { placeId: num
 type Row = { placeId: number; name: string; suburb: string | null; positions: Record<string, number>; vetoedBy: number[] };
 export type Board = { people: Person[]; combined: Row[]; prettySure: boolean };
 
-export function Leaderboard({ board }: { board: Board | null }) {
+/** `overlay`: a layer over the leaderboard that doesn't scroll or clip, for what a "pretty sure" top card draws past its edges. */
+export function Leaderboard({ board, overlay }: { board: Board | null; overlay: HTMLElement | null }) {
   const [tab, setTab] = useState<'together' | number>('together');
   const risers = useRisers(board?.combined);
   const nudges = useRankNudges(board?.combined);
@@ -17,12 +19,12 @@ export function Leaderboard({ board }: { board: Board | null }) {
   const solo = board.people.length < 2;
   const person = solo || tab === 'together' ? undefined : board.people.find((p) => p.id === tab);
   return (
-    <section aria-label="Leaderboard" className="flex flex-col gap-3">
+    <section aria-label="Leaderboard" className="flex flex-col gap-3 land:gap-2">
       <span className="hidden desk:block">
         <Eyebrow>Live leaderboard</Eyebrow>
       </span>
       {!solo && <Tabs people={board.people} selected={person?.id ?? 'together'} onSelect={(t) => startTransition(() => setTab(t))} />}
-      {person ? <PersonRanking person={person} board={board} /> : <Together board={board} risers={risers} nudges={nudges} />}
+      {person ? <PersonRanking person={person} board={board} /> : <Together board={board} risers={risers} nudges={nudges} overlay={overlay} />}
     </section>
   );
 }
@@ -70,7 +72,7 @@ function Tabs({ people, selected, onSelect }: { people: Person[]; selected: 'tog
           role="tab"
           aria-selected={selected === t.id}
           onClick={() => onSelect(t.id)}
-          className="max-w-[9.5em] flex-[1_0_auto] truncate rounded-full px-2.5 py-[7px] text-[13px] font-semibold whitespace-nowrap text-muted aria-selected:bg-white aria-selected:text-ink aria-selected:shadow-[0_2px_6px_-2px_rgba(42,23,18,.25)]"
+          className="max-w-[9.5em] flex-[1_0_auto] truncate rounded-full px-2.5 py-[7px] text-[13px] land:py-[5px] font-semibold whitespace-nowrap text-muted aria-selected:bg-white aria-selected:text-ink aria-selected:shadow-[0_2px_6px_-2px_rgba(42,23,18,.25)]"
         >
           {t.label}
         </button>
@@ -81,7 +83,8 @@ function Tabs({ people, selected, onSelect }: { people: Person[]; selected: 'tog
 
 const listStyle = 'flex flex-col divide-y divide-divider overflow-hidden rounded-[22px] bg-white ring-1 ring-edge';
 
-function Together({ board, risers, nudges }: { board: Board; risers: ReadonlySet<number>; nudges: Nudges }) {
+function Together({ board, risers, nudges, overlay }: { board: Board; risers: ReadonlySet<number>; nudges: Nudges; overlay: HTMLElement | null }) {
+  const card = useRef<HTMLElement>(null);
   const showChips = board.people.length > 1;
   const nameOf = (id: number) => board.people.find((p) => p.id === id)?.name ?? '?';
   const [top, ...rest] = board.combined; // when every place is vetoed, the top pick is one with the fewest vetoes
@@ -92,21 +95,19 @@ function Together({ board, risers, nudges }: { board: Board; risers: ReadonlySet
     <>
       {top && (
         <ViewTransition name="top-pick">
-          <div className={`relative isolate ${sure ? 'mt-16' : ''}`}>
-            {sure && <Fire />}
-            <section aria-label="Top pick" className={`relative z-[1] flex flex-col gap-[5px] rounded-[24px] bg-mustard px-[18px] py-4 ${sure ? 'on-fire' : ''}`}>
-              {sure && <PrettySureStamp />}
-              <span className={`flex items-center gap-1.5 text-[11px] font-extrabold tracking-[.08em] uppercase ${sure ? 'pr-[150px]' : ''}`}>
-                <Crown size={16} aria-hidden="true" /> Top pick
-              </span>
-              <TopName name={top.name} roomForStamp={sure} />
-              {top.vetoedBy.length > 0 && <NopeStamp who={top.vetoedBy.map(nameOf).join(', ')} />}
-              <span className="text-[13px]">{top.suburb}</span>
-              {chips(top, true)}
-            </section>
-          </div>
+          <section ref={card} aria-label="Top pick" className={`relative z-[2] flex flex-col gap-[5px] rounded-[24px] bg-mustard px-[18px] py-4 land:py-3 ${sure ? 'on-fire' : ''}`}>
+            {sure && <span className="sr-only">Statistically “pretty sure”</span>}
+            <span className="flex items-center gap-1.5 text-[11px] font-extrabold tracking-[.08em] uppercase">
+              <Crown size={16} aria-hidden="true" /> Top pick
+            </span>
+            <TopName name={top.name} />
+            {top.vetoedBy.length > 0 && <NopeStamp who={top.vetoedBy.map(nameOf).join(', ')} />}
+            <span className="text-[13px]">{top.suburb}</span>
+            {chips(top, true)}
+          </section>
         </ViewTransition>
       )}
+      {top && sure && overlay && <OnFire card={card} overlay={overlay} />}
       {rest.length > 0 && (
         <ol aria-label="Together" className={listStyle}>
           {rest.map((row, i) => {
@@ -138,7 +139,7 @@ function Together({ board, risers, nudges }: { board: Board; risers: ReadonlySet
 const NAME_SWAP_MS = 450;
 
 /** The top pick's name. When it changes, the old one moves up and out as the new one moves in (a plain swap with reduced motion). */
-function TopName({ name, roomForStamp }: { name: string; roomForStamp: boolean }) {
+function TopName({ name }: { name: string }) {
   const [shown, setShown] = useState(name);
   const [leaving, setLeaving] = useState<string | null>(null);
   if (name !== shown) {
@@ -150,7 +151,7 @@ function TopName({ name, roomForStamp }: { name: string; roomForStamp: boolean }
     const timer = setTimeout(() => setLeaving(null), NAME_SWAP_MS);
     return () => clearTimeout(timer);
   }, [leaving]);
-  const heading = `[grid-area:1/1] font-display text-2xl/[1.08] ${roomForStamp ? 'pr-[150px]' : ''}`;
+  const heading = '[grid-area:1/1] font-display text-2xl/[1.08]';
   return (
     <span className="grid overflow-hidden">
       {leaving && (
@@ -165,16 +166,68 @@ function TopName({ name, roomForStamp }: { name: string; roomForStamp: boolean }
   );
 }
 
-/** "Statistically / Pretty sure": a big rubber stamp over the top card's corner. */
+/** "Statistically / “Pretty sure”": a big rubber stamp over the top card's corner, high enough to keep off the name. */
 const PrettySureStamp = () => (
   <span
     data-testid="pretty-sure"
-    className="absolute -top-2.5 -right-2 z-[3] rotate-6 rounded-[9px] border-4 border-current bg-peach px-[13px] pt-[5px] pb-[7px] text-center text-[23px]/none font-black tracking-[.06em] text-tomato-deep uppercase shadow-[inset_0_0_0_2px_var(--color-peach),inset_0_0_0_3.5px_rgba(194,50,29,.5),0_6px_14px_-6px_rgba(42,23,18,.45)]"
+    className="absolute -top-[38px] -right-2 rotate-6 rounded-[9px] border-4 border-current bg-peach px-[13px] pt-[5px] pb-[7px] text-center text-[23px]/none font-black tracking-[.06em] text-tomato-deep uppercase shadow-[inset_0_0_0_2px_var(--color-peach),inset_0_0_0_3.5px_rgba(194,50,29,.5),0_6px_14px_-6px_rgba(42,23,18,.45)]"
   >
     <small className="mb-[3px] block text-[11px] font-black tracking-[.24em]">Statistically</small>
-    Pretty sure
+    “Pretty sure”
   </span>
 );
+
+/**
+ * A "pretty sure" top card's fire (behind it) and stamp (over its corner). Both reach past the card, where the
+ * scrolling leaderboard would cut them off, so they're drawn in `overlay` beside it, kept over the card as it moves:
+ * over the tabs and heading above it, taking no room and moving nothing.
+ */
+function OnFire({ card, overlay }: { card: RefObject<HTMLElement | null>; overlay: HTMLElement }) {
+  const box = useBoxOver(card, overlay);
+  if (!box) return null;
+  const { shown, ...place } = box;
+  const style = { ...place, visibility: shown ? undefined : 'hidden' } as const;
+  return createPortal(
+    <>
+      <span aria-hidden="true" className="absolute z-[1]" style={style}>
+        <Fire />
+      </span>
+      <span aria-hidden="true" className="absolute z-[3]" style={style}>
+        <PrettySureStamp />
+      </span>
+    </>,
+    overlay,
+  );
+}
+
+/**
+ * Where `target` is, relative to `overlay`, checked every frame (it moves as the board reorders and scrolls). Not
+ * `shown` while it's scrolled up out of its scrolling column, or hidden.
+ */
+function useBoxOver(target: RefObject<HTMLElement | null>, overlay: HTMLElement) {
+  const [box, setBox] = useState<{ top: number; left: number; width: number; height: number; shown: boolean } | null>(null);
+  useEffect(() => {
+    let frame = 0;
+    let last = '';
+    const track = () => {
+      const el = target.current;
+      if (el) {
+        const [r, o] = [el.getBoundingClientRect(), overlay.getBoundingClientRect()];
+        const columnTop = el.closest('[data-board-column]')?.getBoundingClientRect().top ?? r.top;
+        const next = { top: r.top - o.top, left: r.left - o.left, width: r.width, height: r.height, shown: r.width > 0 && r.top >= columnTop - 1 };
+        const key = JSON.stringify(next);
+        if (key !== last) {
+          last = key;
+          setBox(next);
+        }
+      }
+      frame = requestAnimationFrame(track);
+    };
+    track();
+    return () => cancelAnimationFrame(frame);
+  }, [target, overlay]);
+  return box;
+}
 
 // The fire behind a "Pretty sure" top card: blobs rise and merge (the goo filter) into tongues licking past its top
 // edge. An outer tomato layer, an orange one inside it and a short mustard core. Rolled once, so polls don't restart it.
@@ -184,7 +237,6 @@ const FIRE_LAYERS = [
   { count: 48, colour: '#ff7a3d', size: [26, 42], height: [0.5, 0.75], duration: [1.1, 1.7] },
   { count: 32, colour: 'var(--color-mustard)', size: [18, 30], height: [0.3, 0.5], duration: [1, 1.4] },
 ] as const;
-const FIRE_RISE_PX = 120; // the blaze box (from 74px above the card to 36px below its top) and a little more
 const between = ([lo, hi]: readonly [number, number]) => lo + Math.random() * (hi - lo);
 const FIRE = FIRE_LAYERS.map((layer) =>
   Array.from({ length: layer.count }, (_, i) => {
@@ -195,7 +247,7 @@ const FIRE = FIRE_LAYERS.map((layer) =>
       '--c': layer.colour,
       '--d': `${duration}s`,
       '--delay': `-${Math.random() * duration}s`, // start mid-blaze
-      '--h': `${FIRE_RISE_PX * between(layer.height)}px`,
+      '--h': `calc(var(--fire-rise) * ${between(layer.height)})`,
     };
   }),
 );
@@ -277,7 +329,7 @@ function Chips({ row, people, nudges, onGold }: { row: Row; people: Person[]; nu
             className={`relative inline-flex items-center gap-1 rounded-[7px] px-2 py-[3px] text-[11.5px] font-bold whitespace-nowrap transition-colors duration-350 ${medalStyle[medal(rank)]} ${onGold ? 'shadow-[0_0_0_1.5px_rgba(255,255,255,.85)]' : ''}`}
           >
             {rank === 1 && <Flame className={`h-[13px] w-[11px] ${nudge === 'better' ? 'flame-in' : ''}`} />}
-            {p.name} <b className="font-extrabold tabular-nums">{ordinal(rank)}</b>
+            <span className="max-w-[10em] truncate">{p.name}</span> <b className="font-extrabold tabular-nums">{ordinal(rank)}</b>
             {nudge && <RankBadge better={nudge === 'better'} />}
           </span>
         );

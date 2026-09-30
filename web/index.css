@@ -432,9 +432,10 @@
 }
 
 /* "Pretty sure": the top card warms from the bottom, and a blaze rises from behind it past its top edge. */
+/* The glow stays within the 16px the leaderboard column leaves either side of the card, so it's never cut off. */
 .on-fire {
   background: linear-gradient(to top, #ff6a2e 0%, #ff9a3a 30%, var(--color-mustard) 65%, var(--color-mustard) 100%) 50% 100% / 100% 180%;
-  box-shadow: 0 12px 32px -8px rgba(232, 67, 44, 0.6);
+  box-shadow: 0 10px 22px -8px rgba(232, 67, 44, 0.6);
   animation: heat 2.2s ease-in-out infinite alternate;
 }
 @keyframes heat {
@@ -443,16 +444,22 @@
   }
   to {
     background-position: 50% 88%;
-    box-shadow: 0 14px 38px -6px rgba(232, 67, 44, 0.8);
+    box-shadow: 0 12px 24px -9px rgba(232, 67, 44, 0.8);
   }
 }
+/* Blobs rise from 36px below the card's top by up to --fire-rise, less on a sideways phone, which has less room above
+   the card. Inset by the biggest blob's radius, so none pokes out past the card's sides. */
 .blaze {
+  --fire-rise: 120px;
+  @variant land {
+    --fire-rise: 76px;
+  }
   position: absolute;
   z-index: 0;
-  top: -74px;
+  top: calc(46px - var(--fire-rise));
   bottom: calc(100% - 36px);
-  left: 6px;
-  right: 6px;
+  left: 30px;
+  right: 30px;
   pointer-events: none;
 }
 .blaze i {
