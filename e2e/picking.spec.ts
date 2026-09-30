@@ -202,8 +202,9 @@ test('#17 AC7: without one, Share opens a sheet with the link, Copy, and who has
   await expect(sheet.getByRole('button', { name: 'Copied' })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(link);
 
-  await expect(sheet.getByRole('listitem').filter({ hasText: me })).toContainText('1 pick');
-  await expect(sheet.getByRole('listitem').filter({ hasText: friend.name })).toContainText('0 picks');
+  const hereNow = sheet.getByRole('list', { name: 'Here now' }); // not the toasts, which show in the sheet too (#63)
+  await expect(hereNow.getByRole('listitem').filter({ hasText: me })).toContainText('1 pick');
+  await expect(hereNow.getByRole('listitem').filter({ hasText: friend.name })).toContainText('0 picks');
 });
 
 test('#17 AC8: a Pick / Leaderboard toggle on phones; both side by side on desktops', async ({ page }) => {

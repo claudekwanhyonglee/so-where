@@ -228,7 +228,7 @@ function ShareSheet({ link, members, board, meId, onClose }: { link: string; mem
         </div>
       </div>
       <Eyebrow>Here now</Eyebrow>
-      <ul className="flex flex-col divide-y divide-divider rounded-[22px] bg-white ring-1 ring-edge">
+      <ul aria-label="Here now" className="flex flex-col divide-y divide-divider rounded-[22px] bg-white ring-1 ring-edge">
         {members.map((m) => (
           <li key={m.id} className="flex items-center gap-3 px-3.5 py-3">
             <Avatar person={m} />
