@@ -54,7 +54,7 @@ function Row({ icon, label, value, onClick }: { icon: ReactNode; label: string; 
       </span>
       <span className="flex-1 whitespace-nowrap">{label}</span>
       {value && <span className="max-w-[45%] truncate text-sm text-muted">{value}</span>}
-      <ChevronRight size={18} aria-hidden="true" />
+      <ChevronRight size={18} aria-hidden="true" className="flex-none" />
     </button>
   );
 }

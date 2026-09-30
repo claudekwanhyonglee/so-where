@@ -118,7 +118,11 @@ function GuideCard({ steps, state, actions, finished }: { steps: GuideStep[]; st
   const shownStop = finished ? -1 : viewed;
   return (
     <div data-testid="guide-card" className="relative grid overflow-hidden rounded-[30px] bg-tomato text-peach desk:grid-cols-[minmax(0,1fr)_310px] desk:grid-rows-[1fr_auto]">
-      <span aria-hidden="true" className="absolute -right-10 -bottom-10 size-[150px] rounded-full bg-mustard desk:right-auto desk:-bottom-[70px] desk:-left-[60px] desk:size-[220px]" />
+      {/* Placed in the steps' area, at its top right, where no step puts text or buttons. */}
+      <span
+        aria-hidden="true"
+        className="absolute col-[1/2] row-[2/3] top-6 -right-[45px] size-[120px] rounded-full bg-mustard desk:row-[1/2] desk:-top-24 desk:-right-16 desk:size-[220px]"
+      />
       <RoutePanel steps={steps} viewed={shownStop} onView={(i) => show(i)} />
       <div
         ref={scroller}
@@ -356,7 +360,7 @@ function RoutePanel({ steps, viewed, onView }: { steps: GuideStep[]; viewed: num
   return (
     <section
       aria-label="Your route to dinner"
-      className="relative m-1.5 flex flex-col gap-2 rounded-[22px] bg-peach p-3 pb-2 text-ink desk:col-start-2 desk:row-span-2 desk:row-start-1 desk:gap-[18px] desk:rounded-[20px] desk:p-6"
+      className="relative m-1.5 flex flex-col gap-2 rounded-[22px] bg-peach p-3 pb-2 text-ink desk:col-start-2 desk:row-span-2 desk:row-start-1 desk:gap-[18px] desk:self-start desk:rounded-[20px] desk:p-6"
     >
       <div className="flex items-baseline justify-between gap-2 px-0.5 desk:flex-col desk:gap-0 desk:px-0">
         <h2 className="font-display text-[17px]/tight">Your route to dinner</h2>

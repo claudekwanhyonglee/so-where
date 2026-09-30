@@ -21,17 +21,17 @@ export const LONG_SET = 'Friday lunches near the office when it is raining';
 export const LONG_NOTE = 'Ask for the table by the window, and try the burrata. Seriously, the burrata is worth the whole trip across the city.';
 
 /**
- * Signs `name` in (signing them up the first time) in a fresh browser, past the home step and the guide.
- * Returns their signed-in state, for `openOn`, and an API client acting as them.
+ * Signs `name` in (signing them up the first time) in a fresh browser, past the home step and (unless `guide`) the
+ * getting-started guide. Returns their signed-in state, for `openOn`, and an API client acting as them.
  */
-export async function personNamed(browser: Browser, name: string) {
+export async function personNamed(browser: Browser, name: string, { guide = false } = {}) {
   const context = await browser.newContext();
   const { request } = context;
   await request.get(`/?invite=${INVITE}`);
   const created = await request.post('/api/people', { data: { name, pin: '1234' } });
   if (!created.ok()) expect((await request.post('/api/signin', { data: { name, pin: '1234' } })).ok()).toBe(true);
   await request.post('/api/me/skip-home', { data: {} });
-  await request.post('/api/guide/close', { data: {} });
+  if (!guide) await request.post('/api/guide/close', { data: {} });
   const state = await context.storageState();
   return { state, request, close: () => context.close() };
 }

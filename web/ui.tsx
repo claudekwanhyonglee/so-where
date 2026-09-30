@@ -274,7 +274,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       <div className="flex flex-col gap-3.5 p-5 pb-[calc(22px+env(safe-area-inset-bottom,0px))] desk:pb-5">
         <span aria-hidden="true" className="-mt-2 mb-0.5 h-[5px] w-10 self-center rounded-full bg-[#e2cfc4] desk:hidden" />
         <div className="flex items-center gap-2.5">
-          <h2 id={titleId} className="flex-1 font-display text-2xl/tight">
+          <h2 id={titleId} className="line-clamp-2 flex-1 font-display text-2xl/tight wrap-anywhere">
             {title}
           </h2>
           <IconButton label="Close" onClick={onClose}>

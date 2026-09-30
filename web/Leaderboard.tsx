@@ -62,14 +62,15 @@ function useRankNudges(rows?: Row[]) {
 function Tabs({ people, selected, onSelect }: { people: Person[]; selected: 'together' | number; onSelect: (tab: 'together' | number) => void }) {
   const tabs = [{ id: 'together' as const, label: 'Together' }, ...people.map((p) => ({ id: p.id, label: p.name }))];
   return (
-    <div role="tablist" aria-label="Whose ranking" className="flex gap-0.5 overflow-x-auto rounded-full bg-soft p-[3px]">
+    // Each tab is as wide as its name (up to a limit, then …); when they don't all fit, the row scrolls sideways.
+    <div role="tablist" aria-label="Whose ranking" className="flex gap-0.5 overflow-x-auto rounded-full bg-soft p-[3px] [scrollbar-width:none]">
       {tabs.map((t) => (
         <button
           key={t.id}
           role="tab"
           aria-selected={selected === t.id}
           onClick={() => onSelect(t.id)}
-          className="flex-1 truncate rounded-full px-2.5 py-[7px] text-[13px] font-semibold whitespace-nowrap text-muted aria-selected:bg-white aria-selected:text-ink aria-selected:shadow-[0_2px_6px_-2px_rgba(42,23,18,.25)]"
+          className="max-w-[9.5em] flex-[1_0_auto] truncate rounded-full px-2.5 py-[7px] text-[13px] font-semibold whitespace-nowrap text-muted aria-selected:bg-white aria-selected:text-ink aria-selected:shadow-[0_2px_6px_-2px_rgba(42,23,18,.25)]"
         >
           {t.label}
         </button>
