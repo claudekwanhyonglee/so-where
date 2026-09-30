@@ -25,7 +25,7 @@ export function Home({ me, onMeChanged }: { me: Me; onMeChanged: () => void }) {
   return (
     <>
       <h1 className="font-display text-[30px]/[1.1] desk:text-[38px]">Where to, {me.name}?</h1>
-      <div className="grid gap-5 desk:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] desk:items-start">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 desk:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] desk:items-start">
         <StartCard />
         <RecentSessions />
       </div>

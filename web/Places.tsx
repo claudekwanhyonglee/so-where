@@ -289,7 +289,7 @@ function PlaceRow({ place, otherSets, onMore }: { place: PlaceWithSets; otherSet
     <li className="flex items-start gap-3 px-3.5 py-3">
       <PlaceTile place={place} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <b className="font-bold">{place.name}</b>
+        <b className="font-bold wrap-anywhere">{place.name}</b>
         <small className="text-[13px] text-muted">
           {locating ? (
             <span className="inline-flex items-center gap-1.5 before:size-2 before:animate-pulse before:rounded-full before:bg-mustard">Finding suburb…</span>
