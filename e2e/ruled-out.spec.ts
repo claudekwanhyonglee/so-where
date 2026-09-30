@@ -127,7 +127,7 @@ for (const [label, size] of [
         }
       }
       await cards(page).first().getByRole('button', { name: /^Pick / }).click();
-      await expect(pickRegion(page).getByText('1 pick', { exact: true })).toBeVisible();
+      await expect(page.getByText('1 pick', { exact: true }).filter({ visible: true })).toBeVisible(); // in the header on a phone (#62)
     }
   });
 }

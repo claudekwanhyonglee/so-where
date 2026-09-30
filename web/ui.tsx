@@ -185,7 +185,7 @@ export function Avatar({ person, size = 'sm' }: { person: { id: number; name: st
   );
 }
 
-export const DESKTOP_QUERY = '(min-width: 760px)';
+export const DESKTOP_QUERY = '(min-width: 760px) and (min-height: 500px)'; // the `desk` variant in index.css
 
 /** Whether the desktop layout applies, following the window as it resizes. */
 export function useIsDesktop() {

@@ -33,14 +33,15 @@ export function RuledOut({ vetoes, meId, onBringBack }: { vetoes: Veto[]; meId: 
 
   return (
     <div data-open={open || undefined} className="nope-wrap">
-      <section aria-label="Absolutely not" className="flex min-h-0 flex-col gap-2.5 overflow-hidden pt-1.5">
+      {/* Sideways phones have room for one row: the stamp, then the chips scrolling sideways. */}
+      <section aria-label="Absolutely not" className="flex min-h-0 flex-col gap-2.5 overflow-hidden pt-1.5 land:flex-row land:items-center land:pt-0">
         <div className="flex flex-none items-center justify-between gap-2.5">
           <span data-testid="nope-count" className="nope-stamp">
             Absolutely not · {vetoes.filter((v) => !leaving.has(v.key)).length}
           </span>
           {chips.some((v) => v.by.id === meId) && <span className="hidden text-xs text-muted desk:inline">Tap yours to bring it back</span>}
         </div>
-        <div data-testid="nope-items" className="nope-items relative flex min-h-0 flex-wrap content-start gap-[7px] overflow-y-auto overscroll-contain px-0.5 pt-0.5 pb-4">
+        <div data-testid="nope-items" className="nope-items relative flex min-h-0 flex-wrap content-start gap-[7px] overflow-y-auto overscroll-contain px-0.5 pt-0.5 pb-4 land:min-w-0 land:flex-1 land:flex-nowrap land:overflow-x-auto land:overflow-y-hidden land:py-0.5 land:pr-7 land:[scrollbar-width:none]">
           {chips.map((veto) => (
             <NopeChip key={veto.key} veto={veto} mine={veto.by.id === meId} fresh={isNew(veto.key)} leaving={leaving.has(veto.key)} onBringBack={() => bringBack(veto)} />
           ))}
@@ -51,7 +52,7 @@ export function RuledOut({ vetoes, meId, onBringBack }: { vetoes: Veto[]; meId: 
 }
 
 function NopeChip({ veto, mine, fresh, leaving, onBringBack }: { veto: Veto; mine: boolean; fresh: boolean; leaving: boolean; onBringBack: () => void }) {
-  const look = `nope-chip inline-flex max-w-full items-center gap-[7px] rounded-full bg-white py-1.5 pl-3 text-[13px] font-bold whitespace-nowrap ring-[1.5px] ring-edge ring-inset ${fresh ? 'chip-in' : ''} ${leaving ? 'chip-out' : ''}`;
+  const look = `nope-chip inline-flex max-w-full items-center land:max-w-[190px] land:flex-none gap-[7px] rounded-full bg-white py-1.5 pl-3 text-[13px] font-bold whitespace-nowrap ring-[1.5px] ring-edge ring-inset ${fresh ? 'chip-in' : ''} ${leaving ? 'chip-out' : ''}`;
   const content = (
     <>
       <s className="min-w-0 truncate decoration-stamp decoration-[1.5px]">{veto.name}</s>

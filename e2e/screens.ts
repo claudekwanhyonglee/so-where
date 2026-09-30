@@ -61,7 +61,12 @@ export async function pickingSession(browser: Browser, { places, setName = uniqu
     others.push(friend);
   }
   const veto = (placeId: number, who = me) => who.request.post(`/api/sessions/${sessionId}/vetoes`, { data: { placeId } });
-  const close = () => Promise.all([me, ...others].map((p) => p.close()));
+  /** Deletes the set (and so the session) and places, since other tests expect set names to be unique, then signs out. */
+  const close = async () => {
+    await me.request.delete(`/api/sets/${setId}`);
+    for (const id of placeIds) await me.request.delete(`/api/places/${id}`);
+    await Promise.all([me, ...others].map((p) => p.close()));
+  };
   return { me, others, sessionId: sessionId as string, path: `/s/${sessionId}`, placeIds, veto, close };
 }
 

@@ -21,6 +21,7 @@ test('#60 AC1: at 320–430px, Home with a long set name in Recent is exactly sc
     await expectInside(name, row, `name at ${s.name}`);
     await context.close();
   }
+  await me.request.delete(`/api/sets/${setId}`); // other tests expect set names to be unique
   await me.close();
 });
 
@@ -42,6 +43,7 @@ test('#60 AC2: at 320px, a place called "Supercalifragilisticexpialidocious" sta
     await expectScreenWide(page, s);
   }
   await context.close();
+  await me.request.delete(`/api/sets/${setId}`);
   await me.close();
 });
 
