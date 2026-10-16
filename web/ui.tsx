@@ -10,6 +10,7 @@ import {
   type ComponentProps,
   type ReactNode,
 } from 'react';
+import { toast, Toaster } from 'sonner';
 import { errorMessage } from './api.ts';
 import { swatch } from './model.ts';
 
@@ -185,7 +186,7 @@ export function Avatar({ person, size = 'sm' }: { person: { id: number; name: st
   );
 }
 
-export const DESKTOP_QUERY = '(min-width: 760px)';
+export const DESKTOP_QUERY = '(min-width: 760px) and (min-height: 500px)'; // the `desk` variant in index.css
 
 /** Whether the desktop layout applies, following the window as it resizes. */
 export function useIsDesktop() {
@@ -256,7 +257,11 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   useEffect(() => {
     const dialog = ref.current!;
     dialog.showModal();
-    return () => dialog.close();
+    sheetOpened();
+    return () => {
+      dialog.close();
+      sheetClosed();
+    };
   }, []);
   return (
     <dialog
@@ -264,12 +269,12 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      className="mx-0 mt-auto mb-0 max-h-[88dvh] w-full max-w-none overflow-y-auto rounded-t-[28px] bg-peach p-0 text-ink shadow-[0_30px_60px_-20px_rgba(0,0,0,.45)] backdrop:bg-ink/40 desk:m-auto desk:max-w-[460px] desk:rounded-[28px]"
+      className="mx-0 mt-auto mb-0 max-h-[88dvh] w-full max-w-none overflow-y-auto overscroll-contain rounded-t-[28px] bg-peach p-0 text-ink shadow-[0_30px_60px_-20px_rgba(0,0,0,.45)] backdrop:bg-ink/40 desk:m-auto desk:max-w-[460px] desk:rounded-[28px]"
     >
       <div className="flex flex-col gap-3.5 p-5 pb-[calc(22px+env(safe-area-inset-bottom,0px))] desk:pb-5">
         <span aria-hidden="true" className="-mt-2 mb-0.5 h-[5px] w-10 self-center rounded-full bg-[#e2cfc4] desk:hidden" />
         <div className="flex items-center gap-2.5">
-          <h2 id={titleId} className="flex-1 font-display text-2xl/tight">
+          <h2 id={titleId} className="line-clamp-2 flex-1 font-display text-2xl/tight wrap-anywhere">
             {title}
           </h2>
           <IconButton label="Close" onClick={onClose}>
@@ -278,7 +283,50 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         </div>
         {children}
       </div>
+      <Toasts inSheet />
     </dialog>
+  );
+}
+
+// Toasts. An open sheet is a modal <dialog>, drawn in the top layer over everything else, so each sheet has its own
+// toaster for toasts shown while it's open; when the sheet closes, they carry on in the page's toaster.
+
+const SHEET_TOASTER = 'sheet';
+let sheetsOpen = 0;
+const showingInSheet = new Map<string | number, Parameters<typeof toast>>();
+
+/** Shows a toast in place of whatever toast is showing: only one at a time. */
+export function notify(...[message, options]: Parameters<typeof toast>) {
+  toast.dismiss();
+  showingInSheet.clear();
+  const toasterId = sheetsOpen > 0 ? SHEET_TOASTER : undefined;
+  const id = toast(message, { ...options, toasterId });
+  if (toasterId) showingInSheet.set(id, [message, options]);
+  return id;
+}
+
+function sheetOpened() {
+  sheetsOpen++;
+}
+
+function sheetClosed() {
+  if (--sheetsOpen > 0) return;
+  for (const [id, [message, options]] of showingInSheet) toast(message, { ...options, id, toasterId: undefined });
+  showingInSheet.clear();
+}
+
+/** Where toasts show: at the bottom on desktops; at the top on phones, clear of the picking controls and tab bar. */
+export function Toasts({ inSheet = false }: { inSheet?: boolean }) {
+  const desktop = useIsDesktop();
+  const top = 'calc(env(safe-area-inset-top, 0px) + 10px)';
+  return (
+    <Toaster
+      id={inSheet ? SHEET_TOASTER : undefined}
+      visibleToasts={1}
+      position={desktop ? 'bottom-center' : 'top-center'}
+      offset={desktop ? { bottom: '16px' } : { top }}
+      mobileOffset={{ top }}
+    />
   );
 }
 

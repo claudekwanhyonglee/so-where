@@ -1,12 +1,11 @@
 import { Check, ListChecks, Map as MapIcon, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
 import { useState, type KeyboardEvent, type ReactNode } from 'react';
-import { toast } from 'sonner';
 import { api, errorMessage } from './api.ts';
 import { googleMapsUrl, plural, type Place } from './model.ts';
 import type { NamedSet, OpenSheet, PlaceWithSets } from './Places.tsx';
 import { navigate } from './router.tsx';
 import { lookupAnnouncement, MapPreview, Spinner, SuggestionList, useLookup } from './search.tsx';
-import { Button, CheckOption, Field, inputBox, Notice, PlaceTile, SetTile, Sheet, useSubmit } from './ui.tsx';
+import { Button, CheckOption, Field, inputBox, Notice, notify, PlaceTile, SetTile, Sheet, useSubmit } from './ui.tsx';
 
 type SheetProps = { close: () => void; reload: () => Promise<unknown> };
 
@@ -25,7 +24,7 @@ export function AddPlaceSheet({ named, into, open, close, reload }: SheetProps &
     const res = await api<{ place: Place; message?: string }>('/places', { body: { ...chosen.add, note, setIds: [...checked] } });
     await reload();
     close();
-    toast(res.message ?? `Added ${res.place.name}`);
+    notify(res.message ?? `Added ${res.place.name}`);
   });
   const toggle = (id: number) => setChecked((was) => (was.has(id) ? new Set([...was].filter((x) => x !== id)) : new Set([...was, id])));
 
@@ -303,7 +302,7 @@ export function SetActionsSheet({ set, close, reload }: SheetProps & { set: Name
     navigate('/places');
     await reload();
     close();
-    toast('Set deleted');
+    notify('Set deleted');
   });
 
   if (mode === 'rename') {
@@ -392,19 +391,19 @@ export function PlaceActionsSheet({ place, from, named, close, reload }: SheetPr
     await api(`/places/${place.id}`, { method: 'PATCH', body: { note } });
     await reload();
     close();
-    toast('Note saved');
+    notify('Note saved');
   });
   const removeFromSet = useSubmit(async () => {
     await setMembership(from!.id, place.id, false);
     await reload();
     close();
-    toast(`Removed from ${from!.name}`);
+    notify(`Removed from ${from!.name}`);
   });
   const remove = useSubmit(async () => {
     await api(`/places/${place.id}`, { method: 'DELETE' });
     await reload();
     close();
-    toast('Place deleted');
+    notify('Place deleted');
   });
   const toggleSet = (setId: number) => {
     setError('');

@@ -118,10 +118,11 @@ function Sheets({
 
 function PlacesHeader({ places, sets, open }: { places: PlaceWithSets[]; sets: SetSummary[]; open: (s: OpenSheet) => void }) {
   return (
-    <div className="flex items-end gap-3">
-      <div className="min-w-0 flex-1">
-        <h1 className="font-display text-[30px]/[1.1] desk:text-[38px]">Places</h1>
-        <p className="mt-0.5 text-muted">
+    // Phones put the summary on its own line under the title and buttons, so it never wraps.
+    <div className="flex flex-wrap items-end gap-2 desk:flex-nowrap desk:gap-3">
+      <div className="min-w-0 flex-1 phone:contents">
+        <h1 className="font-display text-[30px]/[1.1] phone:min-w-0 phone:flex-1 desk:text-[38px]">Places</h1>
+        <p className="mt-0.5 text-muted phone:order-last phone:basis-full">
           {plural(places.length, 'place')} in {plural(sets.filter(isNamed).length, 'set')}
         </p>
       </div>
@@ -129,7 +130,7 @@ function PlacesHeader({ places, sets, open }: { places: PlaceWithSets[]; sets: S
         <Upload size={18} aria-hidden="true" />
         <span className="hidden desk:inline">Import</span>
       </Button>
-      <Button onClick={() => open({ kind: 'add-place' })}>
+      <Button onClick={() => open({ kind: 'add-place' })} className="phone:px-3.5">
         <Plus size={18} aria-hidden="true" />
         Add place
       </Button>
@@ -289,7 +290,7 @@ function PlaceRow({ place, otherSets, onMore }: { place: PlaceWithSets; otherSet
     <li className="flex items-start gap-3 px-3.5 py-3">
       <PlaceTile place={place} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <b className="font-bold">{place.name}</b>
+        <b className="font-bold wrap-anywhere">{place.name}</b>
         <small className="text-[13px] text-muted">
           {locating ? (
             <span className="inline-flex items-center gap-1.5 before:size-2 before:animate-pulse before:rounded-full before:bg-mustard">Finding suburb…</span>
