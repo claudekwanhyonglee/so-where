@@ -2,6 +2,8 @@
 
 <p align="center">Rank your restaurant list together, one this-or-that pick at a time.</p>
 
+https://github.com/user-attachments/assets/71caa6a2-c659-476f-aff7-f638053293f9
+
 "Where should we eat?" "You decide." Open it on your own phone, tap whichever of two places you'd rather go to, and a live leaderboard shows everyone's ranking and a combined one. You make the final call; it just makes the call easy.
 
 ## Run it
